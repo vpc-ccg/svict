@@ -15,10 +15,11 @@
 
 using namespace std;
 
-kmistrvar::kmistrvar(int kmer_len, const string &partition_file, const string &reference, const string &gtf) : 
+kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &partition_file, const string &reference, const string &gtf) : 
 	variant_caller(partition_file, reference){
 
 	k = kmer_len;
+	ANCHOR_SIZE = anchor_len;
 	num_kmer = (int)pow(4,k);
 	kmer_mask = (long long)(num_kmer-1);
 	num_intervals = 1;
@@ -57,7 +58,7 @@ kmistrvar::~kmistrvar(){
 void kmistrvar::init(){
 
 	for(int i = 0; i < num_kmer; i++){
-		contig_kmers_index[i] = -1;
+		contig_kmers_index[i] = 0;
 	}
 
 	all_intervals.push_back((mapping){"","", 0, 0, -1, 0, 0, 0});
@@ -503,6 +504,8 @@ void kmistrvar::assemble(const string &range, int min_support, const bool LEGACY
 	long long index = 0;
 	string con;
 	string cluster_chr;
+	vector<int> contig_list;
+	contig_kmers.push_back(contig_list);
 
 //STATS
 double part_count = 0;
@@ -626,7 +629,7 @@ if(PRINT_STATS){
 	contig_count2++; 
 	support_count += contig.support();	
 
-	if(pt.get_start() == 67685799){
+	if(pt.get_start() == 13322962){
 		cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
 		cout << contig.data << endl;
 	}
@@ -697,7 +700,7 @@ if(PRINT_STATS){
 
 //cerr << index << " " << con.substr(i, k) << " 2" << endl;
 
-					if(contig_kmers_index[index] == -1){
+					if(!contig_kmers_index[index]){
 						vector<int> contig_list;
 						contig_kmers_index[index] = contig_kmers.size();
 						contig_list.push_back(contig_id);
@@ -749,8 +752,9 @@ void kmistrvar::generate_intervals(const bool LOCAL_MODE)
 	long long index = 0;
 	long long rc_index = 0;
 	long long cur_index = 0;
+	long long index_mask = 0;
 	int shift = 2*(k-1)-1;
-	int i, ii, j, js, je, x, rc;
+	int i, ii, ik, iik1, j, js, je, x, rc;
 	int MAX_INTERVAL_LEN = 10000;
 	int MAX_CONTIG_LEN = 0; 
 	int num_contigs = all_contigs.size();
@@ -806,6 +810,7 @@ double interval_count = 0;
 		index = 0;
 		rc_index = 0;
 
+
 		for(x = 0; x < k-1; x++){    // k-1 kmer for first round
 			if(x > 0 && gen[i+x] == 'N'){
 				i += (x+1);
@@ -848,68 +853,115 @@ double interval_count = 0;
 			}
 
 			ii = i + gen_start;// + 1;
+			iik1 = ii+k-1;
+			index_mask = (gen[i+k-1] & MASK);
 
 			for(rc=0; rc < use_rc; rc++){
 				if(rc){
 					rc_index >>= 2;
-					rc_index |= (((gen[i+k-1] & MASK) ^ MASK_RC) << shift);
+					rc_index |= ((index_mask ^ MASK_RC) << shift);
 					cur_index = rc_index;
 				}
 				else{
 					index <<= 2;
-					index |= ((gen[i+k-1] & MASK) >> 1); 
+					index |= (index_mask >> 1); 
 					index &= kmer_mask;
 					cur_index = index;
 				}
 
-				if(contig_kmers_index[cur_index] == -1)continue;
+				if(contig_kmers_index[cur_index]){
 
-				for(const int& j : contig_kmers[contig_kmers_index[cur_index]]){
+					for(const int& j : contig_kmers[contig_kmers_index[cur_index]]){
 
-					if( (!LOCAL_MODE || j == jj)){ 
+						//if( (!LOCAL_MODE || j == jj)){ 
 
-						intervals = &contig_mappings[rc][chr_num][j];
-						last_interval = &intervals->back();
+	 						intervals = &contig_mappings[rc][chr_num][j];
+	 						last_interval = &intervals->back();
 
-						if(intervals->empty()){
-							intervals->push_back((mapping){"",chromo, rc, false, ii, k, -1, j, -1});
-						}
-						else if(last_interval->chr == chromo && last_interval->loc == ii-(last_interval->len-k)-1){
-							last_interval->len++;
-						}
-						else if(last_interval->chr == chromo && (ii-(last_interval->loc + last_interval->len) == 1)){ //Allows for SNPs
-							last_interval->len += (k+1);
-						}
-						else if(last_interval->chr != chromo || (ii-(last_interval->loc + last_interval->len) > 1)){
+	 						//========================================================================
+	// 						if(intervals->empty()){
+	// 							intervals->push_back((mapping){"",chromo, rc, false, ii, k, -1, j, -1});
+	// 							continue;
+	// 						}
+	// 						else if(last_interval->chr == chromo && (ii-(last_interval->loc + last_interval->len) <= 1)){
+	// 							if(last_interval->loc == iik1-last_interval->len){ //ii-(last_interval->len-k)-1){  
+	// 								last_interval->len++;
+	// 							}
+	// 							else if(ii-last_interval->loc == last_interval->len){ //ii-(last_interval->loc + last_interval->len) == 1){ //Allows for SNPs   
+	// 								last_interval->len += (k+1);
+	// 							}
+	// 							continue;
+	// 						}
+							
 
-							if(last_interval->len < ANCHOR_SIZE){
-								intervals->pop_back();
+	// 						if(last_interval->len < ANCHOR_SIZE){
+	// 							intervals->pop_back();
+	// 						}
+	// 						else if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) && last_interval->len < intervals->at(intervals->size()-2).len){
+	// 							intervals->pop_back();
+	// pop_back++;
+	// 						}
+	// 						else{
+	// 							for(int x = intervals->size()-1; x >= 0; x--){
+	// 								if(last_interval->len > intervals->at(x).len){
+	// 									intervals->insert(intervals->begin()+x,*last_interval);
+	// 									intervals->pop_back();
+	// 									if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) || intervals->size() > REPEAT_LIMIT2){
+	// pop_back++;
+	// 										intervals->pop_back();
+	// 									}
+	// 									break;
+	// 								}
+	// 							}
+	// 						}
+
+	// 						if(intervals->size() > REPEAT_LIMIT1){
+	// 							repeat[rc][chr_num][j] = true;
+	// 						}
+	// 						intervals->push_back((mapping){"",chromo, rc, false, ii, k, -1, j, -1});
+							//=========================================================================
+
+
+							if(intervals->empty()){
+								intervals->push_back((mapping){"",chromo, rc, false, ii, k, -1, j, -1});
 							}
-							else if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) && last_interval->len < intervals->at(intervals->size()-2).len){
-								intervals->pop_back();
-pop_back++;
+							else if(last_interval->chr == chromo && last_interval->loc == ii-(last_interval->len-k)-1){
+								last_interval->len++;
 							}
-							else{
-								for(int x = intervals->size()-1; x >= 0; x--){
-									if(last_interval->len > intervals->at(x).len){
-										intervals->insert(intervals->begin()+x,*last_interval);
-										intervals->pop_back();
-										if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) || intervals->size() > REPEAT_LIMIT2){
-pop_back++;
+							else if(last_interval->chr == chromo && (ii-(last_interval->loc + last_interval->len) == 1)){ //Allows for SNPs
+								last_interval->len += (k+1);
+							}
+							else if(last_interval->chr != chromo || (ii-(last_interval->loc + last_interval->len) > 1)){
+
+								if(last_interval->len < ANCHOR_SIZE){
+									intervals->pop_back();
+								}
+								else if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) && last_interval->len < intervals->at(intervals->size()-2).len){
+									intervals->pop_back();
+	pop_back++;
+								}
+								else{
+									for(int x = intervals->size()-1; x >= 0; x--){
+										if(last_interval->len > intervals->at(x).len){
+											intervals->insert(intervals->begin()+x,*last_interval);
 											intervals->pop_back();
+											if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) || intervals->size() > REPEAT_LIMIT2){
+	pop_back++;
+												intervals->pop_back();
+											}
+											break;
 										}
-										break;
 									}
 								}
+
+								if(intervals->size() > REPEAT_LIMIT1){
+									repeat[rc][chr_num][j] = true;
+								}
+								intervals->push_back((mapping){"",chromo, rc, false, ii, k, -1, j, -1});
 							}
 
-							if(intervals->size() > REPEAT_LIMIT1){
-								repeat[rc][chr_num][j] = true;
-							}
-							intervals->push_back((mapping){"",chromo, rc, false, ii, k, -1, j, -1});
-						}
-
-						if(LOCAL_MODE)break;
+						//	if(LOCAL_MODE)break;
+						//}
 					}
 				}
 			}

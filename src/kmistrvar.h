@@ -19,14 +19,13 @@ class kmistrvar : public variant_caller
 {
 private:
 
-	const int ANCHOR_SIZE = 40;
 	const int MAX_INTERVALS = 100000;
 	const bool TESTING = false;
 	const short MASK = 6;
 	const short MASK_RC = 4;
 	const int TEST_PARTS = 14;
 	const int MAX_SV_LEN = 20000;//10000000;
-	const int CON_NUM_DEBUG = -11894;
+	const int CON_NUM_DEBUG = -10235;
 	const int REPEAT_LIMIT1 = 5;
 	const int REPEAT_LIMIT2 = 50;
 	const bool USE_ANNO = true;
@@ -61,6 +60,7 @@ private:
 	int num_kmer;
 	int k;
 	int num_intervals;
+	int ANCHOR_SIZE;
 	
 
 public:
@@ -84,7 +84,7 @@ private:
 	
 public:
 	
-	kmistrvar(int kmer_len, const string &partition_file, const string &reference, const string &gtf);
+	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf);
 	~kmistrvar();
 	void run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int uncertainty, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank);
 };

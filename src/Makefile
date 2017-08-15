@@ -22,4 +22,3 @@ $(EXECUTABLE): $(OBJECTS)
 
 clean:
 	find . -name '*.o' -delete
-	rm -rf ${EXECUTABLE}

@@ -1,3 +1,5 @@
+EXECUTABLE=CellFreeSV
+
 all:
 	$(MAKE) -C src all
 	mv src/CellFreeSV .
@@ -8,4 +10,4 @@ profile:
 
 clean:
 	$(MAKE) -C src clean
-	mv src/CellFreeSV .
+	rm -rf ${EXECUTABLE}

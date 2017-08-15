@@ -6,6 +6,7 @@
 #include <string>
 #include <map>
 #include <zlib.h>
+#include "../include/cxxopts.hpp"
 #include "partition.h"
 #include "common.h"
 #include "assembler.h"
@@ -75,9 +76,9 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 
 /********************************************************************/
 void predict (const string &partition_file, const string &reference, const string &gtf, const string &range, const string &out_vcf, const string &out_full, 
-					int k, int min_support, int uncertainty, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank)
+					int k, int anchor_len, int min_support, int uncertainty, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank)
 {
-	kmistrvar predictor(k, partition_file, reference, gtf);
+	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf);
 	predictor.run_kmistrvar(range, out_vcf, out_full, min_support, uncertainty, LEGACY_ASSEMBLER, LOCAL_MODE, ref_flank);
 }
 
@@ -423,61 +424,171 @@ void annotate (string gtf, string in_file, string out_file, bool genomic) {
 }
 
 /********************************************************************/
-int main(int argc, char **argv)
-{
-	try {
-		if (argc < 2) throw "Usage:\tCellFreeSV [mode=(?)]";
 
-		string mode = argv[1];
-		if (mode == "fastq") {
-			if (argc < 4) throw "Usage:\tCellFreeSV fastq [sam-file] [output]";
-			extractOEA(argv[2], argv[3], argc == 4 ? true : false);
+int main(int argc, char* argv[])
+{
+	try{
+
+		cxxopts::Options options(argv[0], "CellFreeSV: Structural Variant Calling in cfDNA Sequencing Data");
+		options.positional_help("[optional args]");
+		string input_sam, reference, out_prefix, annotation;
+		int threshold, k, a, s, u;
+
+		//[kmer-length] [min-support] [uncertainty] [local-assembly] [local-mode] [reference-flank]
+
+		options.add_options()
+			("i,input", "Input SAM file (required)", cxxopts::value<std::string>(), "FILE")
+			("r,reference", "Reference file (required)", cxxopts::value<std::string>(), "FILE")
+			("o,output", "Output prefix", cxxopts::value<std::string>()->default_value("out"), "PREFIX")
+			("g,annotation", "GTF annotation file", cxxopts::value<std::string>()->default_value(""), "FILE")  //TODO handle old and new
+			("c", "Clustering threshold (default 1000)", cxxopts::value<int>()->default_value("1000"), "INT")
+			("k", "Kmer length (default 14)", cxxopts::value<int>()->default_value("14"), "INT")
+			("a", "Anchor length (default 40)", cxxopts::value<int>()->default_value("40"), "INT")
+			("s", "Min Read Support (default 2)", cxxopts::value<int>()->default_value("2"), "INT")
+			("u", "Uncertainty (default 8)", cxxopts::value<int>()->default_value("8"), "INT")
+			//("l", "Use legacy assembler")
+			("h,help", "Print help");
+
+
+		options.parse(argc, argv);
+
+		if (options.count("help")){
+			std::cout << options.help({""}) << std::endl;
+			exit(0);
 		}
-		else if (mode == "oea") {
-			if (argc != 4) throw "Usage:\tCellFreeSV oea [sam-file] [output]";
-			extractMrsFASTOEA(argv[2], argv[3]);
+
+		if (options.count("input")){
+			input_sam = options["input"].as<std::string>();
+
+			ifstream f(input_sam.c_str());
+			if(!f.good()){
+				throw cxxopts::OptionException("Input file does not exist");
+			}
 		}
-		else if (mode == "mask" || mode == "maski") {
-			if (argc != 6) throw "Usage:\tCellFreeSV mask/maski [repeat-file] [reference] [output] [padding]";
-			mask(argv[2], argv[3], argv[4], atoi(argv[5]), mode == "maski");
+		else{
+			throw cxxopts::OptionException("No input file specified");
 		}
-		else if (mode == "sort") {
-			if (argc != 4) throw "Usage:\tCellFreeSV sort [sam-file] [output]";
-			sortSAM(argv[2], argv[3]);
+
+		if (options.count("reference")){
+			reference = options["reference"].as<std::string>();
+
+			ifstream f(reference.c_str());
+			if(!f.good()){
+				throw cxxopts::OptionException("Reference file does not exist");
+			}
 		}
-		else if (mode == "rm_unmap") {
-			if (argc != 4) throw "Usage:\tCellFreeSV rm_unmap [fq-file] [output]";
-			removeUnmapped(argv[2], argv[3]);
+		else{
+			throw cxxopts::OptionException("No Reference file specified");
 		}
-		else if (mode == "partition") {
-			if (argc != 6) throw "Usage:\tCellFreeSV partition [read-file] [mate-file] [output-file] [threshold]";
-			partify(argv[2], argv[3], argv[4], atoi(argv[5]));
+
+		out_prefix = options["output"].as<std::string>();
+
+		if (options.count("annotation")){
+			annotation = options["annotation"].as<std::string>();
+
+			ifstream f(annotation.c_str());
+			if(!f.good()){
+				throw cxxopts::OptionException("Annotation file does not exist");
+			}
 		}
-		else if (mode == "predict") {
-			if (argc != 14) throw "Usage:\tCellFreeSV predict [partition-file] [reference] [gtf] [range] [output-file-vcf] [output-file-full] [kmer-length] [min-support] [uncertainty] [local-assembly] [local-mode] [reference-flank]"; 
-			predict(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], atoi(argv[8]), atoi(argv[9]), atoi(argv[10]), atoi(argv[11]), atoi(argv[12]), atoi(argv[13]));
+		
+
+		threshold = options["c"].as<int>();
+		k = options["k"].as<int>();
+		a = options["a"].as<int>();
+		s = options["s"].as<int>();
+		u = options["u"].as<int>();
+
+		if(threshold < 0){
+			throw cxxopts::OptionException("Cluster threshold must be a positive integer");
 		}
-		else if (mode == "get_cluster") {
-			if (argc != 4) throw "Usage:\tCellFreeSV get_cluster [partition-file] [range]";
-			genome_partition pt;
-			pt.output_partition( argv[2], argv[3]);
+
+		if(k < 5){
+			throw cxxopts::OptionException("K must be greater than 5");
 		}
-		else if (mode == "simulate_SVs") {
-			if (argc != 5) throw "Usage:\tCellFreeSV simulate_SVs [bed-or-SV-file] [ref-file] [is-bed]";
-			simulate_SVs(argv[2], argv[3], atoi(argv[4]));
+		else if(k > a){
+			throw cxxopts::OptionException("K must be <= anchor length");
 		}
-		else if (mode == "annotate") {
-			if (argc != 6) throw "Usage:\tCellFreeSV annotate [gtf-file] [bed-file] [out-file] [is-genomic]";
-			annotate(argv[2], argv[3], argv[4], atoi(argv[5]));
+		
+		if(s < 2){
+			throw cxxopts::OptionException("Read support threshold must be >= 2");
 		}
-		else {
-			throw "Invalid mode selected";
+
+		if(u < 0){
+			throw cxxopts::OptionException("Uncertainty must be a positive integer");
 		}
-	}
-	catch (const char *e) {
-		ERROR("Error: %s\n", e);
+
+		std::cout << "Arguments remain = " << argc << std::endl;
+
+		cout << "Running with parameters: k=" << k << " a=" << a << " s=" << s << " u=" << u << endl;
+
+		predict(input_sam, reference, annotation, "0-2000", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, u, 0, 0, 0);
+
+	} catch (const cxxopts::OptionException& e)
+	{
+		std::cout << "error parsing options: " << e.what() << std::endl;
 		exit(1);
 	}
-		
+
 	return 0;
 }
+
+
+// int main(int argc, char **argv)
+// {
+// 	try {
+// 		if (argc < 2) throw "Usage:\tCellFreeSV [mode=(?)]";
+
+// 		string mode = argv[1];
+// 		if (mode == "fastq") {
+// 			if (argc < 4) throw "Usage:\tCellFreeSV fastq [sam-file] [output]";
+// 			extractOEA(argv[2], argv[3], argc == 4 ? true : false);
+// 		}
+// 		else if (mode == "oea") {
+// 			if (argc != 4) throw "Usage:\tCellFreeSV oea [sam-file] [output]";
+// 			extractMrsFASTOEA(argv[2], argv[3]);
+// 		}
+// 		else if (mode == "mask" || mode == "maski") {
+// 			if (argc != 6) throw "Usage:\tCellFreeSV mask/maski [repeat-file] [reference] [output] [padding]";
+// 			mask(argv[2], argv[3], argv[4], atoi(argv[5]), mode == "maski");
+// 		}
+// 		else if (mode == "sort") {
+// 			if (argc != 4) throw "Usage:\tCellFreeSV sort [sam-file] [output]";
+// 			sortSAM(argv[2], argv[3]);
+// 		}
+// 		else if (mode == "rm_unmap") {
+// 			if (argc != 4) throw "Usage:\tCellFreeSV rm_unmap [fq-file] [output]";
+// 			removeUnmapped(argv[2], argv[3]);
+// 		}
+// 		else if (mode == "partition") {
+// 			if (argc != 6) throw "Usage:\tCellFreeSV partition [read-file] [mate-file] [output-file] [threshold]";
+// 			partify(argv[2], argv[3], argv[4], atoi(argv[5]));
+// 		}
+// 		else if (mode == "predict") {
+// 			if (argc != 14) throw "Usage:\tCellFreeSV predict [partition-file] [reference] [gtf] [range] [output-file-vcf] [output-file-full] [kmer-length] [min-support] [uncertainty] [local-assembly] [local-mode] [reference-flank]"; 
+// 			predict(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], atoi(argv[8]), atoi(argv[9]), atoi(argv[10]), atoi(argv[11]), atoi(argv[12]), atoi(argv[13]));
+// 		}
+// 		else if (mode == "get_cluster") {
+// 			if (argc != 4) throw "Usage:\tCellFreeSV get_cluster [partition-file] [range]";
+// 			genome_partition pt;
+// 			pt.output_partition( argv[2], argv[3]);
+// 		}
+// 		else if (mode == "simulate_SVs") {
+// 			if (argc != 5) throw "Usage:\tCellFreeSV simulate_SVs [bed-or-SV-file] [ref-file] [is-bed]";
+// 			simulate_SVs(argv[2], argv[3], atoi(argv[4]));
+// 		}
+// 		else if (mode == "annotate") {
+// 			if (argc != 6) throw "Usage:\tCellFreeSV annotate [gtf-file] [bed-file] [out-file] [is-genomic]";
+// 			annotate(argv[2], argv[3], argv[4], atoi(argv[5]));
+// 		}
+// 		else {
+// 			throw "Invalid mode selected";
+// 		}
+// 	}
+// 	catch (const char *e) {
+// 		ERROR("Error: %s\n", e);
+// 		exit(1);
+// 	}
+		
+// 	return 0;
+// }
