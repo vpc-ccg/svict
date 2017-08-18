@@ -38,11 +38,11 @@ public:
     const char* getReadName() const { return strFields[RN]; }
     const int getMappingFlag() const { return intFields[MF]; }
     const char* getChromosome() const { return strFields[CHR]; }
-    const size_t getLocation() const { return intFields[LOC] - 1; }
+    const size_t getLocation() const { return intFields[LOC]; }
     const char getMappingQuality() const { return intFields[MQ]; }
     const char* getCigar() const { return strFields[CIGAR]; }
     const char* getPairChromosome() const { return strFields[P_CHR]; }
-    const size_t getPairLocation() const { return intFields[P_LOC] - 1; }
+    const size_t getPairLocation() const { return intFields[P_LOC]; }
     const int getTemplateLength() const { return intFields[TLEN]; }
     const char* getSequence() const { return strFields[SEQ]; }
     const char* getQuality() const { return strFields[QUAL]; }
