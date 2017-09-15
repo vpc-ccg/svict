@@ -37,15 +37,16 @@ bool assembler::validate(const string &a, const string &b, int sz)
 	return true;
 }
 
-vector<contig> assembler::assemble(vector<string> reads) 
+vector<contig> assembler::assemble(vector<pair<pair<string, string>, int>> reads) 
 {
 
 	auto lens = set<int>();
 	for (auto &r: reads) {
-		lens.insert(r.size());
+		lens.insert(r.first.second.size());
 	}
 
 	auto s = set<string>(), R = set<string>();
+	unordered_map<string, string> RN = unordered_map<string, string>();
 /*	for (auto &r: reads) {
 		for (int i = 0; i < r.size(); i++) {
 			for (auto rl: lens) {
@@ -57,20 +58,21 @@ vector<contig> assembler::assemble(vector<string> reads)
 
 	for (auto &r: reads) {
 		//if (s.find(r) == s.end()) {
-			R.insert(r);
+			R.insert(r.first.second);
+			RN[r.first.second] = r.first.first;	
 		//	s.insert(r);
 		//}
 	}
-	reads = vector<string>(R.begin(), R.end());
+	vector<string> read_seqs = vector<string>(R.begin(), R.end());
 
 	int min_len = *lens.begin();
 	int max_len = *lens.rbegin();
 
 	vector<unordered_map<int, vector<int>>> phash(max_len), shash(max_len);
-	graph = Graph(reads.size());
+	graph = Graph(read_seqs.size());
 
-	for (int ri = 0; ri < reads.size(); ri++) {
-		auto &r = reads[ri];
+	for (int ri = 0; ri < read_seqs.size(); ri++) {
+		auto &r = read_seqs[ri];
 		for (int i = 0, hp = 0, hs = 0, exp = 1; i < r.size(); i++, exp = (exp << 2) % SEED) {
 			hp = ((hp * 4) % SEED + getDNAValue(r[i])) % SEED;
 			hs = ((getDNAValue(r[r.size() - 1 - i]) * exp) % SEED + hs) % SEED;
@@ -81,16 +83,17 @@ vector<contig> assembler::assemble(vector<string> reads)
 			//	break;
 	
 			for (auto ni: phash[i][hs]) {
-				if (validate(reads[ni], r, i)) 
+				if (validate(read_seqs[ni], r, i)) 
 					graph[ri].neighbors.push_back({ni, i});
 			}
 			for (auto ni: shash[i][hp]) {
-				if (validate(r, reads[ni], i)) 
+				if (validate(r, read_seqs[ni], i)) 
 					graph[ni].neighbors.push_back({ri, i});
 			}
 			phash[i][hp].push_back(ri);
 			shash[i][hs].push_back(ri);
 		}
+		graph[ri].name = RN[read_seqs[ri]];
 		graph[ri].seq = r;
 	}
 
@@ -245,7 +248,7 @@ vector<contig> assembler::path()
 			seq += graph[t.first].seq.substr(t.second + 1);
 			//E("{:3} {:5}: {}{}", t.first, t.second, pad, graph[t.first].seq);
 			prev_len = graph[t.first].seq.size();
-			c.read_information.push_back({string(), graph[t.first].seq, 0, (int)pad.size()});
+			c.read_information.push_back({graph[t.first].name, graph[t.first].seq, 0, (int)pad.size()});
 		}
 
 		c.data = seq;

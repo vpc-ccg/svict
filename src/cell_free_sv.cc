@@ -75,11 +75,11 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 }
 
 /********************************************************************/
-void predict (const string &partition_file, const string &reference, const string &gtf, const string &range, const string &out_vcf, const string &out_full, 
-					int k, int anchor_len, int min_support, int uncertainty, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank)
+void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const string &range, const string &out_vcf, const string &out_full, 
+					int k, int anchor_len, int min_support, int uncertainty, int min_length, int max_length, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank)
 {
-	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf);
-	predictor.run_kmistrvar(range, out_vcf, out_full, min_support, uncertainty, LEGACY_ASSEMBLER, LOCAL_MODE, ref_flank);
+	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes);
+	predictor.run_kmistrvar(range, out_vcf, out_full, min_support, uncertainty, min_length, max_length, LEGACY_ASSEMBLER, LOCAL_MODE, ref_flank);
 }
 
 /********************************************************************/
@@ -432,7 +432,8 @@ int main(int argc, char* argv[])
 		cxxopts::Options options(argv[0], "CellFreeSV: Structural Variant Calling in cfDNA Sequencing Data");
 		options.positional_help("[optional args]");
 		string input_sam, reference, out_prefix, annotation;
-		int threshold, k, a, s, u;
+		int threshold, k, a, s, u, m, M;
+		bool barcodes = false;
 
 		//[kmer-length] [min-support] [uncertainty] [local-assembly] [local-mode] [reference-flank]
 
@@ -441,11 +442,14 @@ int main(int argc, char* argv[])
 			("r,reference", "Reference file (required)", cxxopts::value<std::string>(), "FILE")
 			("o,output", "Output prefix", cxxopts::value<std::string>()->default_value("out"), "PREFIX")
 			("g,annotation", "GTF annotation file", cxxopts::value<std::string>()->default_value(""), "FILE")  //TODO handle old and new
+			("b,barcodes", "Input reads contain barcodes", cxxopts::value<bool>(barcodes))
 			("c", "Clustering threshold (default 1000)", cxxopts::value<int>()->default_value("1000"), "INT")
 			("k", "Kmer length (default 14)", cxxopts::value<int>()->default_value("14"), "INT")
 			("a", "Anchor length (default 40)", cxxopts::value<int>()->default_value("40"), "INT")
 			("s", "Min Read Support (default 2)", cxxopts::value<int>()->default_value("2"), "INT")
 			("u", "Uncertainty (default 8)", cxxopts::value<int>()->default_value("8"), "INT")
+			("m", "Min SV length (default 10)", cxxopts::value<int>()->default_value("40"), "INT")
+			("M", "Max SV length (default 20000)", cxxopts::value<int>()->default_value("20000"), "INT")
 			//("l", "Use legacy assembler")
 			("h,help", "Print help");
 
@@ -498,6 +502,8 @@ int main(int argc, char* argv[])
 		a = options["a"].as<int>();
 		s = options["s"].as<int>();
 		u = options["u"].as<int>();
+		m = options["m"].as<int>();
+		M = options["M"].as<int>();
 
 		if(threshold < 0){
 			throw cxxopts::OptionException("Cluster threshold must be a positive integer");
@@ -518,11 +524,19 @@ int main(int argc, char* argv[])
 			throw cxxopts::OptionException("Uncertainty must be a positive integer");
 		}
 
+		if(m <= u){
+			throw cxxopts::OptionException("Min SV length should be > uncertainty");
+		}
+
+		if(m > M){
+			throw cxxopts::OptionException("Min SV length should be <= max SV length");
+		}
+
 		std::cout << "Arguments remain = " << argc << std::endl;
 
-		cout << "Running with parameters: k=" << k << " a=" << a << " s=" << s << " u=" << u << endl;
+		cout << "Running with parameters: k=" << k << " a=" << a << " s=" << s << " u=" << u << " m=" << m << " M=" << M << endl;
 
-		predict(input_sam, reference, annotation, "0-2000", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, u, 0, 0, 0);
+		predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, u, m, M, 0, 0, 0);
 
 	} catch (const cxxopts::OptionException& e)
 	{

@@ -26,6 +26,7 @@ struct contig {
 };
 
 struct Node {
+	string name;
 	string seq;
 	int indegree;
 	vector<pair<int, int>> neighbors; // Read, Weight
@@ -52,5 +53,5 @@ public:
 	vector<int> topsort();
 
 public:
-	vector<contig> assemble(vector<string> reads);
+	vector<contig> assemble(vector<pair<pair<string, string>, int>> reads);
 };
