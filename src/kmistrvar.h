@@ -35,8 +35,7 @@ private:
 	const bool USE_BARCODES = false;
 
 	struct mapping{
-		string seq;
-		string chr;
+		char chr;
 		bool rc;
 		long loc;
 		int len;
@@ -48,7 +47,7 @@ private:
 	vector<contig> all_contigs;
 	vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
 	vector<string> contexts ={"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
-	vector<pair<string,pair<int,int>>> regions;
+	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
 	vector<bool>** repeat;
 	vector<vector<int>> contig_kmers;

@@ -17,7 +17,7 @@ struct Read {
 struct contig {
 	string data;
 	vector<Read> read_information;
-	string cluster_chr;
+	char cluster_chr;
 	int cluster_loc;
 
 	int support (void) const { 

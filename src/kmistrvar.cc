@@ -14,7 +14,7 @@
 #include "kmistrvar.h"
 
 using namespace std;
-
+#define strequ(A,B) (strcmp(A.c_str(), B.c_str()) == 0)
 kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes) : 
 	variant_caller(partition_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), USE_BARCODES(barcodes){
 
@@ -60,7 +60,7 @@ void kmistrvar::init(){
 		contig_kmers_index[i] = 0;
 	}
 
-	all_intervals.push_back((mapping){"","", 0, 0, -1, 0, 0, 0}); 
+	all_intervals.push_back((mapping){-1, 0, 0, -1, 0, 0, 0}); 
 }
 
 
@@ -178,7 +178,7 @@ void kmistrvar::print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id,
 	string ref, alt;
 	string info = "";
 	string contig_seq = con.data;
-	string contig_chr = con.cluster_chr;
+	char contig_chr = con.cluster_chr;
 	string best_gene1 = "", best_trans1 = "", context1 = "";
 	string best_gene2 = "", best_trans2 = "", context2 = "";
 	string best_gene3 = "", best_trans3 = "", context3 = "";
@@ -312,26 +312,26 @@ void kmistrvar::print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id,
 	if(type == "TRANS"){
 
 		if(USE_ANNO){
-			locate_interval(m1.chr, loc, loc, gene_sorted_map[m1.chr], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
+			locate_interval(chromos[m1.chr], loc, loc, gene_sorted_map[chromos[m1.chr]], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
 			context1 = contexts[vec_best1[0]];
-			locate_interval(m2.chr, m2.loc, (m2.loc + m2.len), gene_sorted_map[m2.chr], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
+			locate_interval(chromos[m2.chr], m2.loc, (m2.loc + m2.len), gene_sorted_map[chromos[m2.chr]], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
 			context2 = contexts[vec_best2[0]];
 
 			if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + "-FUSION";
 		}
 
 		fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t%f\tPASS\tSVTYPE=%s;END=%d;Cluster=%d;Contig=%d;Support=%d;Info=%s;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s;Source=%s,%d,%d,+\n", 
-			m1.chr.c_str(), loc, ref.c_str(), alt.c_str(), score, type.c_str(), end, contig_loc, id, contig_sup, 
-			info.c_str(), context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), m2.chr.c_str(), m2.loc, (m2.loc + m2.len));
+			chromos[m1.chr].c_str(), loc, ref.c_str(), alt.c_str(), score, type.c_str(), end, contig_loc, id, contig_sup, 
+			info.c_str(), context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), chromos[m2.chr].c_str(), m2.loc, (m2.loc + m2.len));
 	}
 	else{
 
 		if(USE_ANNO){
-			locate_interval(m1.chr, loc, loc, gene_sorted_map[m1.chr], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
+			locate_interval(chromos[m1.chr], loc, loc, gene_sorted_map[chromos[m1.chr]], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
 			context1 = contexts[vec_best1[0]];
-			locate_interval(m2.chr, end, end, gene_sorted_map[m2.chr], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
+			locate_interval(chromos[m2.chr], end, end, gene_sorted_map[chromos[m2.chr]], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
 			context2 = contexts[vec_best2[0]];
-			locate_interval(m1.chr, loc, end, gene_sorted_map[m1.chr], 0, iso_gene_map, best_gene3, best_trans3, vec_best3);
+			locate_interval(chromos[m1.chr], loc, end, gene_sorted_map[chromos[m1.chr]], 0, iso_gene_map, best_gene3, best_trans3, vec_best3);
 			context3 = contexts[vec_best3[0]];
 
 			if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + "-FUSION";
@@ -339,19 +339,19 @@ void kmistrvar::print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id,
 
 		if(info == "Interspersed"){
 			fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t%f\tPASS\tSVTYPE=%s;END=%d;Cluster=%d;Contig=%d;Support=%d;Info=%s;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s;ContextC=%s;GeneC=%s;TransC=%s;Source=%s,%d,%d,+\n", 
-				m1.chr.c_str(), loc, ref.c_str(), alt.c_str(), score, type.c_str(), end, contig_loc, id, contig_sup, 
-				info.c_str(), context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), context3.c_str(), best_gene3.c_str(), best_trans3.c_str(), m2.chr.c_str(), m2.loc, (m2.loc + m2.len));
+				chromos[m1.chr].c_str(), loc, ref.c_str(), alt.c_str(), score, type.c_str(), end, contig_loc, id, contig_sup, 
+				info.c_str(), context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), context3.c_str(), best_gene3.c_str(), best_trans3.c_str(), chromos[m2.chr].c_str(), m2.loc, (m2.loc + m2.len));
 		}
 		else{
 			fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t%f\tPASS\tSVTYPE=%s;END=%d;Cluster=%d;Contig=%d;Support=%d;Info=%s;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s;ContextC=%s;GeneC=%s;TransC=%s\n", 
-				m1.chr.c_str(), loc, ref.c_str(), alt.c_str(), score, type.c_str(), end, contig_loc, id, contig_sup, 
+				chromos[m1.chr].c_str(), loc, ref.c_str(), alt.c_str(), score, type.c_str(), end, contig_loc, id, contig_sup, 
 				info.c_str(), context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), context3.c_str(), best_gene3.c_str(), best_trans3.c_str());
 		}
 	}
 	 
 	fprintf(fo_full, "%s\t%s\t%d\t%d\t%s\t%d\t%d\tCONTIG:\t%d\t%s\t%d\t%d\t%s\t%d\t%d\t%d\t%s\n", 
-		type.c_str(), m1.chr.c_str(), m1.loc,  (m1.loc + m1.len), m2.chr.c_str(), m2.loc, (m2.loc + m2.len), id, 
-		m1.chr.c_str(), (m1.con_loc-(m1.len-k)), (m1.con_loc+k), m2.chr.c_str(), (m2.con_loc-(m2.len-k)), (m2.con_loc+k), contig_sup, info.c_str());
+		type.c_str(), chromos[m1.chr].c_str(), m1.loc,  (m1.loc + m1.len), chromos[m2.chr].c_str(), m2.loc, (m2.loc + m2.len), id, 
+		chromos[m1.chr].c_str(), (m1.con_loc-(m1.len-k)), (m1.con_loc+k), chromos[m2.chr].c_str(), (m2.con_loc-(m2.len-k)), (m2.con_loc+k), contig_sup, info.c_str());
 
 	if(PRINT_READS){
 		fprintf(fr_vcf, ">Cluster: %d Contig: %d MaxSupport: %d BP: %d Reads: \n", contig_loc, id, contig_sup, (m1.con_loc+k-1));
@@ -449,44 +449,44 @@ void kmistrvar::print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1
 	if(type == "TRANS"){
 
 		if(USE_ANNO){
-			locate_interval(m1.chr, loc1, end1, gene_sorted_map[m1.chr], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
+			locate_interval(chromos[m1.chr], loc1, end1, gene_sorted_map[chromos[m1.chr]], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
 			context1 = contexts[vec_best1[0]];
-			locate_interval(m4.chr, loc2, end2, gene_sorted_map[m2.chr], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
+			locate_interval(chromos[m4.chr], loc2, end2, gene_sorted_map[chromos[m2.chr]], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
 			context2 = contexts[vec_best2[0]];
 
 			if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + "-FUSION";
 		}
 
 		fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t%s[%s:%d[\t%f\tPASS\tSVTYPE=BND;MATEID=bnd_%d;Cluster=%d;Contig=%d;Support=%d;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s\n", 
-			m1.chr.c_str(), loc1, m1.id, ref.c_str(), ref.c_str(), m2.chr.c_str(), loc2, score, m4.id, contig_loc1, id1, contig_sup1,
+			chromos[m1.chr].c_str(), loc1, m1.id, ref.c_str(), ref.c_str(), chromos[m2.chr].c_str(), loc2, score, m4.id, contig_loc1, id1, contig_sup1,
 			context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str()); 
 		fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t]%s:%d]%s\t%f\tPASS\tSVTYPE=BND;MATEID=bnd_%d;Cluster=%d;Contig=%d;Support=%d;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s\n", 
-			m4.chr.c_str(), end1, m4.id, ref2.c_str(), m2.chr.c_str(), end2, ref2.c_str(), score, m1.id, contig_loc2, id2, contig_sup2,
+			chromos[m4.chr].c_str(), end1, m4.id, ref2.c_str(), chromos[m2.chr].c_str(), end2, ref2.c_str(), score, m1.id, contig_loc2, id2, contig_sup2,
 			context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str()); 
 	}
 	else{
 
 		if(USE_ANNO){
-			locate_interval(m1.chr, loc1, loc1, gene_sorted_map[m1.chr], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
+			locate_interval(chromos[m1.chr], loc1, loc1, gene_sorted_map[chromos[m1.chr]], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
 			context1 = contexts[vec_best1[0]];
-			locate_interval(m4.chr, end2, end2, gene_sorted_map[m2.chr], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
+			locate_interval(chromos[m4.chr], end2, end2, gene_sorted_map[chromos[m2.chr]], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
 			context2 = contexts[vec_best2[0]];
-			locate_interval(m1.chr, loc1, end2, gene_sorted_map[m1.chr], 0, iso_gene_map, best_gene3, best_trans3, vec_best3);
+			locate_interval(chromos[m1.chr], loc1, end2, gene_sorted_map[chromos[m1.chr]], 0, iso_gene_map, best_gene3, best_trans3, vec_best3);
 			context3 = contexts[vec_best3[0]];
 
 			if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + "-FUSION";
 		}
 
 		fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t%f\tPASS\tSVTYPE=%s;END=%d;Cluster1=%d;Contig1=%d;Support1=%d;Cluster2=%d;Contig2=%d;Support2=%d;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s;ContextC=%s;GeneC=%s;TransC=%s\n", 
-			m1.chr.c_str(), loc1, ref.c_str(), alt.c_str(), score, type.c_str(), end2, contig_loc1, id1, contig_sup1, contig_loc2, id2, contig_sup2,
+			chromos[m1.chr].c_str(), loc1, ref.c_str(), alt.c_str(), score, type.c_str(), end2, contig_loc1, id1, contig_sup1, contig_loc2, id2, contig_sup2,
 			 context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), context3.c_str(), best_gene3.c_str(), best_trans3.c_str());
 	}
 
 	fprintf(fo_full, "%s\t%s\t%d\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%d\t%d\tCONTIG:\t%d\t%s\t%d\t%d\t%s\t%d\t%d\t%d\tCONTIG:\t%d\t%s\t%d\t%d\t%s\t%d\t%d\t%d\n", 
-		type.c_str(), m1.chr.c_str(), m1.loc,  (m1.loc + m1.len), m4.chr.c_str(), m4.loc, (m4.loc + m4.len),
-		type.c_str(), m2.chr.c_str(), m2.loc,  (m2.loc + m2.len), m3.chr.c_str(), m3.loc, (m3.loc + m3.len), 
-		id1, m1.chr.c_str(), (m1.con_loc-(m1.len-k)), (m1.con_loc+k), m4.chr.c_str(), (m4.con_loc-(m4.len-k)), (m4.con_loc+k), contig_sup1,
-		id2, m2.chr.c_str(), (m2.con_loc-(m2.len-k)), (m2.con_loc+k), m3.chr.c_str(), (m3.con_loc-(m3.len-k)), (m3.con_loc+k), contig_sup2);
+		type.c_str(), chromos[m1.chr].c_str(), m1.loc,  (m1.loc + m1.len), chromos[m4.chr].c_str(), m4.loc, (m4.loc + m4.len),
+		type.c_str(), chromos[m2.chr].c_str(), m2.loc,  (m2.loc + m2.len), chromos[m3.chr].c_str(), m3.loc, (m3.loc + m3.len), 
+		id1, chromos[m1.chr].c_str(), (m1.con_loc-(m1.len-k)), (m1.con_loc+k), chromos[m4.chr].c_str(), (m4.con_loc-(m4.len-k)), (m4.con_loc+k), contig_sup1,
+		id2, chromos[m2.chr].c_str(), (m2.con_loc-(m2.len-k)), (m2.con_loc+k), chromos[m3.chr].c_str(), (m3.con_loc-(m3.len-k)), (m3.con_loc+k), contig_sup2);
 
 	if(PRINT_READS){
 		fprintf(fr_vcf, ">Cluster: %d Contig: %d MaxSupport: %d Reads: \n", contig_loc1, id1, contig_sup1);
@@ -513,9 +513,37 @@ void kmistrvar::print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1
 
 void kmistrvar::run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int uncertainty, int min_length, int max_length, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank)
 {
+
+
+clock_t begin = clock();
+clock_t end;
+double elapsed_secs;
+
 	assemble(range, min_support, LEGACY_ASSEMBLER, LOCAL_MODE, ref_flank);
+
+if(PRINT_STATS){
+end = clock();
+elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+cerr << "Assembly Time: " << elapsed_secs << endl;
+begin = clock();
+}
+
 	generate_intervals(LOCAL_MODE);
+
+if(PRINT_STATS){
+end = clock();
+elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+cerr << "Mapping Time: " << elapsed_secs << endl;
+begin = clock();
+}
 	predict_variants(out_vcf, out_full, uncertainty, min_length, max_length);
+
+if(PRINT_STATS){
+end = clock();
+elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+cerr << "Calling Time: " << elapsed_secs << endl;
+}
+
 }
 
 
@@ -543,7 +571,7 @@ double support_count = 0;
 
 	// If local mode enabled, use regions around contigs. Otherwise, add all chromosomes as regions
 	if(!LOCAL_MODE){  
-		for(string & chr : chromos){
+		for(char chr=0; chr < chromos.size(); chr++){//string & chr : chromos){
 			regions.push_back({chr,{1, 300000000}});  //WARNING: This will not work with all reference files. Same with old version. 
 		}
 	}
@@ -597,9 +625,9 @@ if(PRINT_STATS){
 	}
 }
 				
-				contig.cluster_chr = pt.get_reference();
+				contig.cluster_chr = find(chromos.begin(), chromos.end(), pt.get_reference()) - chromos.begin(); //pt.get_reference();
 				contig.cluster_loc = pt.get_start();
-				if(LOCAL_MODE)regions.push_back({pt.get_reference(), {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
+				if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
 				
 				con = contig.data;
 				unordered_map<long long, vector<int>> kmer_location;
@@ -655,7 +683,6 @@ if(PRINT_STATS){
 					index <<= 2;
 					index |= ((con[i+k-1] & MASK) >> 1); 
 					index &= kmer_mask;
-
 					// Add to index
 					if(!contig_kmers_index[index]){
 						vector<int> contig_list;
@@ -667,6 +694,7 @@ if(PRINT_STATS){
 						if(contig_kmers[contig_kmers_index[index]].back() != contig_id)contig_kmers[contig_kmers_index[index]].push_back(contig_id);
 					}
 					kmer_locations[contig_id][index].push_back(i);
+
 				}
 				contig_id++;
 			}
@@ -708,7 +736,7 @@ void kmistrvar::generate_intervals(const bool LOCAL_MODE)
 	cerr << "Generating intervals..." << endl;
 
 	int use_rc = 2; //1 no, 2 yes
-	int chr_num = 0;
+	//int chromo = 0;
 	int jj = 0;
 	int id = 1;  //zero reserved for sink
 	long long index = 0;
@@ -720,7 +748,7 @@ void kmistrvar::generate_intervals(const bool LOCAL_MODE)
 	int MAX_CONTIG_LEN = 0; 
 	int num_contigs = all_contigs.size();
 	int ref_counts[MAX_INTERVAL_LEN];
-	int gen_start, gen_end;
+	int gen_start, gen_end, match_len, contig_len;
 	bool con_repeat;
 
 //STATS
@@ -733,8 +761,8 @@ double interval_count = 0;
 	vector<pair<int,int>> starts;
 	mapping* last_interval; 
 	string gen, contig_seq, match;
-	string chromo = "first";
-	string last_chromo = chromo;
+	char chromo = -1;
+	char last_chromo = chromo;
 
 
 	// Initialization 
@@ -759,9 +787,8 @@ double interval_count = 0;
 	// Traverse each chromosome or region (Local mode)
 	for (auto &region: regions){
 
-		chr_num = find(chromos.begin(), chromos.end(), region.first) - chromos.begin();
 		chromo = region.first;
-		gen = ref.extract(chromo, region.second.first, region.second.second); //get region sequence
+		gen = ref.extract(chromos[chromo], region.second.first, region.second.second); //get region sequence
 		gen_start = max(0,region.second.first-1);
 		gen_end = gen.length()-k+1;
 
@@ -850,15 +877,17 @@ double interval_count = 0;
 					//if( (!LOCAL_MODE || j == jj)){ 
 
 						// Get last interval for this contig
- 						intervals = &contig_mappings[rc][chr_num][j];
- 						last_interval = &intervals->back();
-
+ 						intervals = &contig_mappings[rc][chromo][j];
+ 						
  						// Start new interval if empty
 						if(intervals->empty()){
-							intervals->push_back((mapping){"",chromo, rc, ii, k, -1, j, -1});
+							intervals->push_back((mapping){chromo, rc, ii, k, -1, j, -1});
+							continue;
 						}
+
+						last_interval = &intervals->back();
 						// Extend interval by one
-						else if(last_interval->chr == chromo && last_interval->loc == ii-(last_interval->len-k)-1){
+						if(last_interval->chr == chromo && last_interval->loc == ii-(last_interval->len-k)-1){
 							last_interval->len++;
 						}
 						// Extend interval by k+1 if a SNP/SNV is detected
@@ -873,7 +902,7 @@ double interval_count = 0;
 								intervals->pop_back();
 							}
 							// Throw away repeat intervals on another chromosome, or far from the anchor, or shorter than the longest interval discovered so far
-							else if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) && last_interval->len < intervals->at(intervals->size()-2).len){
+							else if(repeat[rc][chromo][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) && last_interval->len < intervals->at(intervals->size()-2).len){
 								intervals->pop_back();
 pop_back++;
 							}
@@ -883,7 +912,7 @@ pop_back++;
 									if(last_interval->len > intervals->at(x).len){
 										intervals->insert(intervals->begin()+x,*last_interval);
 										intervals->pop_back();
-										if(repeat[rc][chr_num][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) || intervals->size() > REPEAT_LIMIT2){
+										if(repeat[rc][chromo][j] && (chromo != all_contigs[j].cluster_chr || (abs(last_interval->loc+(last_interval->len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) || intervals->size() > REPEAT_LIMIT2){
 pop_back++;
 											intervals->pop_back();
 										}
@@ -894,11 +923,11 @@ pop_back++;
 
 							// Set repeat flag
 							if(intervals->size() > REPEAT_LIMIT1){
-								repeat[rc][chr_num][j] = true;
+								repeat[rc][chromo][j] = true;
 							}
 
 							// Create new interval
-							intervals->push_back((mapping){"",chromo, rc, ii, k, -1, j, -1});
+							intervals->push_back((mapping){chromo, rc, ii, k, -1, j, -1});
 						}
 
 					//	if(LOCAL_MODE)break;
@@ -913,22 +942,23 @@ pop_back++;
 		for(rc=0; rc < use_rc; rc++){
 			for(j = js; j < je; j++){
 
-				if(!contig_mappings[rc][chr_num][j].empty()){
-					if(contig_mappings[rc][chr_num][j].back().len < ANCHOR_SIZE){
+				if(!contig_mappings[rc][chromo][j].empty()){
+					if(contig_mappings[rc][chromo][j].back().len < ANCHOR_SIZE){
 pop_back++;
-						contig_mappings[rc][chr_num][j].pop_back();
-						if(contig_mappings[rc][chr_num][j].empty())continue;
+						contig_mappings[rc][chromo][j].pop_back();
+						if(contig_mappings[rc][chromo][j].empty())continue;
 					}
 				 
 					vector<mapping> valid_intervals;
 					contig_seq = all_contigs[j].data;
+					contig_len = (contig_seq.length()+k+1);
 
-					for(auto &interval: contig_mappings[rc][chr_num][j]){
+					for(auto &interval: contig_mappings[rc][chromo][j]){
 
 //STATS
 if(PRINT_STATS){
 	int contig_loc = all_contigs[interval.con_id].cluster_loc;
-	string contig_chr = all_contigs[interval.con_id].cluster_chr;
+	char contig_chr = all_contigs[interval.con_id].cluster_chr;
 	if(interval.chr == contig_chr && abs(interval.loc - contig_loc) < MAX_ASSEMBLY_RANGE){
 		anchor_intervals++;
 	}
@@ -937,16 +967,18 @@ if(PRINT_STATS){
 	}
 }
 	
-						match = ref.extract(chromo, interval.loc+1, (interval.loc + interval.len));
+						match = ref.extract(chromos[chromo], interval.loc+1, (interval.loc + interval.len));
 						if(rc)match = reverse_complement(match);
 						len = match.length()-k+1;
 
 						// intialization
 						starts.clear();
+						match_len = len+k+k;
+						
 
-						for(x=0; x < (match.length()+k+1); x++){
+						for(x=0; x < match_len; x++){
 							ref_counts[x] = 0;
-							for(y=0; y < (contig_seq.length()+k+1); y++){
+							for(y=0; y < contig_len; y++){
 								valid_mappings[x][y] = false;
 							}
 						}
@@ -1022,7 +1054,6 @@ if(PRINT_STATS){
 								// Add to final list of intervals
 								if(!con_repeat){
 									mapping sub_interval = interval;
-									sub_interval.seq = contig_seq.substr(start.second, ilen);
 									sub_interval.loc += start.first;
 									sub_interval.len = ilen;
 									sub_interval.con_loc = y;
@@ -1038,7 +1069,7 @@ interval_count += valid_intervals.size();
 
 
 					num_intervals += valid_intervals.size();
-					contig_mappings[rc][chr_num][j] = valid_intervals;
+					contig_mappings[rc][chromo][j] = valid_intervals;
 
 					if(!valid_intervals.empty()){
 						for(auto &interval: valid_intervals){
@@ -1095,7 +1126,7 @@ if(PRINT_STATS){
 
 	for(auto & interval : all_intervals){
 		int contig_loc = all_contigs[interval.con_id].cluster_loc;
-		string contig_chr = all_contigs[interval.con_id].cluster_chr;
+		char contig_chr = all_contigs[interval.con_id].cluster_chr;
 		bool is_anchor = ((interval.chr == contig_chr) && (abs(interval.loc+(interval.len/2) - contig_loc) < (MAX_ASSEMBLY_RANGE*2)));
 		if(interval.chr == contig_chr && abs(interval.loc - contig_loc) < MAX_ASSEMBLY_RANGE){
 			anchor_intervals++;
@@ -1117,7 +1148,8 @@ if(PRINT_STATS){
 	int contig_loc, contig_len, loc, id;
 	long long index = 0;
 	bool found = false;
-	string contig_seq, contig_chr;
+	char contig_chr;
+	string contig_seq;
 	contig cur_contig;
 
 	vector<int>* interval_pair_ids = new vector<int>[all_intervals.size()];
