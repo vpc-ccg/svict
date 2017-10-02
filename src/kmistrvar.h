@@ -26,7 +26,7 @@ private:
 	const int CON_NUM_DEBUG = -10235;
 	const int REPEAT_LIMIT1 = 5;   //intra-chromosome
 	const int REPEAT_LIMIT2 = 50;  //inter-chromosome
-	const int REPEAT_LIMIT3 = 400; //total
+	const int REPEAT_LIMIT3 = 400; //total 400
 	const int CON_REPEAT_LIMIT = 2;
 	const int ANCHOR_SIZE = 40;
 	const bool USE_ANNO = true;
@@ -35,6 +35,12 @@ private:
 	const bool USE_BARCODES = false;
 
 	struct mapping{
+		long loc;
+		int len;
+		int con_loc;
+	};
+
+	struct mapping_ext{
 		char chr;
 		bool rc;
 		long loc;
@@ -42,6 +48,21 @@ private:
 		int con_loc;
 		int con_id;
 		int id;
+	};
+
+	struct sortable_mapping{
+		int id;
+		long loc;
+
+		bool operator<( const sortable_mapping& rhs){
+		    return this->loc < rhs.loc;
+		}
+	};
+
+	struct interval_pair{
+		bool visited;
+		int id1;
+		int id2;
 	};
 
 	vector<contig> all_contigs;
@@ -54,7 +75,6 @@ private:
 	map <string,vector<isoform>> iso_gene_map;
 	map <string,vector<gene_data>> gene_sorted_map;
 	int* contig_kmers_index; 
-	vector<mapping> all_intervals;
 	vector<unordered_map<long long, vector<int>>> kmer_locations;
 	long long kmer_mask;
 	int num_kmer;
@@ -72,9 +92,10 @@ private:
 	string itoa (int i);
 	pair<int,pair<int,int>> compute_support(contig contig, int start, int end);
 	vector<pair<pair<string, string>, int>> correct_reads(vector<pair<pair<string, string>, int>> reads);
-	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id, mapping m1, mapping m2, string type);
-	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1, int id2, mapping m1, mapping m2, mapping m3, mapping m4, string type);
-	void print_interval(string label, mapping& interval);
+	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id, mapping_ext m1, mapping_ext m2, string type);
+	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1, int id2, mapping_ext m1, mapping_ext m2, mapping_ext m3, mapping_ext m4, string type);
+	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
+	void print_interval(string label, mapping_ext& interval);
 	void assemble(const string &range, int min_support, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank);
 	void generate_intervals(const bool LOCAL_MODE);
 	void predict_variants(const string &out_vcf, const string &out_full, int uncertainty, int min_length, int max_length);
