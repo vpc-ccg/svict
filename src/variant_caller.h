@@ -19,11 +19,9 @@ protected:
 	const int MIN_SV_LEN_DEFAULT = 10;
 	const int MAX_ASSEMBLY_RANGE = 5000;
 	const int OVERLAP_NEW = 50; //50
-	const int OVERLAP_OLD = 20; //20
 	const int DEBUG = 1410;//16034742;
 
 	assembler as; 
-	assembler_old as_old; 
 	genome ref;
 	genome_partition pt;
 	string part_file;

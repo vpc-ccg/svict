@@ -66,7 +66,7 @@ void genome::reset(void)
 string genome::extract(const string &rname, int start, int end)
 {
 	while (rname != reference_name) {
-		fprintf(stderr, "%s != %s\n",  reference_name.c_str(), rname.c_str());
+		fprintf(stderr, "Chr %s done\n",  reference_name.c_str(), rname.c_str());
 		string last = reference_name;
 		load_next();
 		if(last == reference_name){

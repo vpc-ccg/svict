@@ -76,10 +76,10 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 
 /********************************************************************/
 void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const string &range, const string &out_vcf, const string &out_full, 
-					int k, int anchor_len, int min_support, int uncertainty, int min_length, int max_length, const bool LEGACY_ASSEMBLER, const bool LOCAL_MODE, int ref_flank)
+					int k, int anchor_len, int min_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
 {
 	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes);
-	predictor.run_kmistrvar(range, out_vcf, out_full, min_support, uncertainty, min_length, max_length, LEGACY_ASSEMBLER, LOCAL_MODE, ref_flank);
+	predictor.run_kmistrvar(range, out_vcf, out_full, min_support, uncertainty, min_length, max_length, LOCAL_MODE, ref_flank);
 }
 
 /********************************************************************/
@@ -450,7 +450,6 @@ int main(int argc, char* argv[])
 			("u", "Uncertainty (default 8)", cxxopts::value<int>()->default_value("8"), "INT")
 			("m", "Min SV length (default 10)", cxxopts::value<int>()->default_value("40"), "INT")
 			("M", "Max SV length (default 20000)", cxxopts::value<int>()->default_value("20000"), "INT")
-			//("l", "Use legacy assembler")
 			("h,help", "Print help");
 
 
@@ -536,7 +535,7 @@ int main(int argc, char* argv[])
 
 		cout << "Running with parameters: k=" << k << " a=" << a << " s=" << s << " u=" << u << " m=" << m << " M=" << M << endl;
 
-		predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, u, m, M, 0, 0, 0);
+		predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, u, m, M, 0, 0);
 
 	} catch (const cxxopts::OptionException& e)
 	{
