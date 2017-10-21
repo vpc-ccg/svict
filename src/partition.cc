@@ -123,7 +123,7 @@ size_t genome_partition::dump (const vector<pair<pair<string, string>, int>> &ve
 	return pos;
 }
 
-vector<pair<pair<string, string>, int>> genome_partition::read_partition (const string &partition_file, const string &range)
+vector<pair<pair<string, string>, int>> genome_partition::read_partition (const string &partition_file, const string &range, int min_r, int max_r)
 {
 	static unsigned int start = -1, end = -1;
 	static vector<size_t> offsets;
@@ -173,17 +173,21 @@ reset:
 	fscanf(fi, "%d %d %d %d %s\n", &p_cluster_id, &sz, &p_start, &p_end, pref);
 	p_ref = pref;
 
-	result.resize(0);
-	result.reserve(sz);
+	if(sz <= max_r && sz >= min_r){
 
-	for (i = 0; i < sz; i++) {
-		fgets(pref, MAXB, fi);
-		int loc;
-		sscanf(pref, "%s %s %d", name, read, &loc);
-		result.push_back({{string(name), string(read)}, loc});
-		//fprintf(stderr,"%s %s %d\n", result.back().first.first.c_str(), result.back().first.second.c_str(), result.back().second);
-		//fprintf(stderr,"..\n");
+		result.resize(0);
+		result.reserve(sz);
+
+		for (i = 0; i < sz; i++) {
+			fgets(pref, MAXB, fi);
+			int loc;
+			sscanf(pref, "%s %s %d", name, read, &loc);
+			result.push_back({{string(name), string(read)}, loc});
+			//fprintf(stderr,"%s %s %d\n", result.back().first.first.c_str(), result.back().first.second.c_str(), result.back().second);
+			//fprintf(stderr,"..\n");
+		}
 	}
+
 	fclose(fi);
 	if (result.size() == 0)
 		goto reset;

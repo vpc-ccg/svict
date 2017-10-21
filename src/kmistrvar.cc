@@ -765,7 +765,6 @@ void kmistrvar::generate_intervals(const bool LOCAL_MODE)
 	int MAX_CONTIG_LEN = 0; 
 	int MAX_INTERVAL_LEN = 20000;
 	int num_contigs = all_contigs.size();
-	int ref_counts[MAX_INTERVAL_LEN];
 	int gen_start, gen_end, interval_len, contig_len;
 	bool con_repeat;
 
@@ -798,6 +797,7 @@ double interval_count = 0;
 	}
 	MAX_CONTIG_LEN += (k+1); //Rare case of SNP near the end of the longest contig. 
 	MAX_INTERVAL_LEN = MAX_CONTIG_LEN+100;
+	int ref_counts[MAX_INTERVAL_LEN];
 
 	bool** valid_mappings = new bool*[MAX_INTERVAL_LEN]; //think of a better solution
 
@@ -1013,7 +1013,7 @@ if(contig_len > max_con_len)max_con_len = contig_len;
 
 				for(auto &interval: contig_mappings[rc][chromo][j]){
 
-					if(interval.len >= MAX_INTERVAL_LEN)continue;
+					if(interval.len+k+1 >= MAX_INTERVAL_LEN)continue;
 
 //STATS
 if(PRINT_STATS){

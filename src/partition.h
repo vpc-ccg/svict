@@ -34,7 +34,7 @@ public:
 	~genome_partition (void);
 	
 	vector<pair<pair<string, string>, int>> get_next (void);
-	vector<pair<pair<string, string>, int>> read_partition (const string&, const string&);
+	vector<pair<pair<string, string>, int>> read_partition (const string&, const string&, int min_r, int max_r);
 	int output_partition (const string&, const string&);
 
 
