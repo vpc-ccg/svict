@@ -30,9 +30,9 @@ kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &partition
 		contig_mappings[rc] = new vector<vector<mapping>>[25];
 	}
 
-	repeat = new vector<short>*[2];
+	last_intervals = new vector<last_interval>*[2];
 	for(int rc=0; rc < 2; rc++){
-		repeat[rc] = new vector<short>[25];
+		last_intervals[rc] = new vector<last_interval>[25];
 	}
 
 	init();
@@ -48,9 +48,9 @@ kmistrvar::~kmistrvar(){
 	delete[] contig_mappings;
 
 	for(int rc=0; rc < 2; rc++){
-		delete[] repeat[rc];
+		delete[] last_intervals[rc];
 	}
-	delete[] repeat;
+	delete[] last_intervals;
 
 }
 
@@ -523,7 +523,7 @@ void kmistrvar::print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1
 //======================================================
 
 
-void kmistrvar::run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
+void kmistrvar::run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
 {
 
 
@@ -531,12 +531,13 @@ clock_t begin = clock();
 clock_t end;
 double elapsed_secs;
 
-	assemble(range, min_support, LOCAL_MODE, ref_flank);
+	assemble(range, min_support, max_support, LOCAL_MODE, ref_flank);
 
 if(PRINT_STATS){
 end = clock();
 elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-cerr << "Assembly Time: " << elapsed_secs << endl;
+cerr << "ASSEMBLY TIME: " << elapsed_secs << endl;
+cerr << endl;
 begin = clock();
 }
 
@@ -545,7 +546,8 @@ begin = clock();
 if(PRINT_STATS){
 end = clock();
 elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-cerr << "Mapping Time: " << elapsed_secs << endl;
+cerr << "MAPPING TIME: " << elapsed_secs << endl;
+cerr << endl;
 begin = clock();
 }
 	predict_variants(out_vcf, out_full, uncertainty, min_length, max_length);
@@ -553,7 +555,8 @@ begin = clock();
 if(PRINT_STATS){
 end = clock();
 elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-cerr << "Calling Time: " << elapsed_secs << endl;
+cerr << "CALLING TIME: " << elapsed_secs << endl;
+cerr << endl;
 }
 
 }
@@ -563,7 +566,7 @@ cerr << "Calling Time: " << elapsed_secs << endl;
 // Local Assembly and Contig Indexing Stage
 //======================================================
 
-void kmistrvar::assemble(const string &range, int min_support, const bool LOCAL_MODE, int ref_flank)
+void kmistrvar::assemble(const string &range, int min_support, int max_support, const bool LOCAL_MODE, int ref_flank)
 {
 	
 	int contig_id = 0;
@@ -574,6 +577,7 @@ void kmistrvar::assemble(const string &range, int min_support, const bool LOCAL_
 	string con;
 	string cluster_chr;
 	vector<int> contig_list;
+	vector<contig> contigs;
 	contig_kmers.push_back(contig_list);
 	contig_kmer_counts.push_back(0);
 
@@ -596,7 +600,6 @@ double support_count = 0;
 	while (1) {
 		
 		vector<pair<pair<string, string>, int>> p;
-		vector<contig> contigs;
 
 		//Read in partition file
 		p = pt.read_partition(part_file, range, min_support, MAX_READS_PER_PART);
@@ -617,7 +620,7 @@ if(PRINT_STATS){
 		
 		//TODO: Contig merging
 		for (auto &contig: contigs){ 
-			if (contig.support() >= min_support) {
+			if (contig.support() >= min_support && contig.support() <= max_support) { //no loss of sensitivity! 
 
 //STATS
 if(PRINT_STATS){
@@ -625,8 +628,8 @@ if(PRINT_STATS){
 	support_count += contig.support();	
 
 	if(pt.get_start() == 13322962){
-		cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
-		cout << contig.data << endl;
+		//cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
+		//cout << contig.data << endl;
 	}
 }
 				
@@ -643,7 +646,7 @@ if(PRINT_STATS){
 				// Per chromosome repeat flag for each contig
 				for(int rc=0; rc < 2; rc++){
 					for(int chr=0; chr < 25; chr++){
-						repeat[rc][chr].push_back(-1);
+						last_intervals[rc][chr].push_back((last_interval){0,k,0});//-1});
 					}
 				}
 
@@ -691,7 +694,8 @@ if(PRINT_STATS){
 
 					// Add to index
 					if(!contig_kmers_index[index]){
-						vector<int> contig_list = vector<int>(1);
+						vector<int> contig_list;
+						contig_list.reserve(1);
 						contig_kmers_index[index] = contig_kmers.size();
 						contig_list.push_back(contig_id);
 						contig_kmers.push_back(contig_list);
@@ -701,6 +705,7 @@ if(PRINT_STATS){
 						if(contig_kmers[contig_kmers_index[index]].back() != contig_id){
 							contig_kmers[contig_kmers_index[index]].push_back(contig_id);
 							if(contig_kmers[contig_kmers_index[index]].size() > max_hits)max_hits = contig_kmers[contig_kmers_index[index]].size();
+							//if(contig_kmers[contig_kmers_index[index]].size() >= 30 && (contig_kmers[contig_kmers_index[index]].capacity() - contig_kmers[contig_kmers_index[index]].size()) >= 30)contig_kmers[contig_kmers_index[index]].shrink_to_fit(); // 4 secs for 70MB
 						}
 					}
 					kmer_locations[contig_id][index].push_back(i); //TODO get rid of this. Use the lookup table dummy.
@@ -709,6 +714,7 @@ if(PRINT_STATS){
 				contig_id++;
 			}
 		}
+		vector<contig>().swap(contigs);
 	}
 
 	//sketchy
@@ -735,8 +741,7 @@ if(PRINT_STATS){
 	cerr << "Average Contig Support: " << (support_count/contig_count2) << endl;
 	cerr << "Number of unique kmers: " << contig_kmers.size() << endl;
 	cerr << "Max hits: " << max_hits << endl;
-}
-	
+}	
 }
 
 
@@ -760,8 +765,9 @@ void kmistrvar::generate_intervals(const bool LOCAL_MODE)
 	long long cur_index = 0;
 	long long cur_index2 = 0;
 	long long index_mask = 0;
+	long iend;
 	int shift = 2*(k-1)-1;
-	int i, ii, ii1, ik, iik1, j, js, je, x, y, z, rc, len, ilen;
+	int i, ii, ii1, ik, iik, iik1, j, js, je, x, y, z, rc, len, ilen;
 	int MAX_CONTIG_LEN = 0; 
 	int MAX_INTERVAL_LEN = 20000;
 	int num_contigs = all_contigs.size();
@@ -797,7 +803,6 @@ double interval_count = 0;
 	}
 	MAX_CONTIG_LEN += (k+1); //Rare case of SNP near the end of the longest contig. 
 	MAX_INTERVAL_LEN = MAX_CONTIG_LEN+100;
-	int ref_counts[MAX_INTERVAL_LEN];
 
 	bool** valid_mappings = new bool*[MAX_INTERVAL_LEN]; //think of a better solution
 
@@ -921,67 +926,62 @@ kmer_hits++;
 					// Local mode temporarily disabled
 					//if( (!LOCAL_MODE || j == jj)){ 
 kmer_hits_con++;
-
-						// Get last interval for this contig
- 						vector<mapping>& intervals = contig_mappings[rc][chromo][j];
- 						
- 						// Start new interval if empty
-						// if(intervals.empty()){
-						// 	if(!contig_kmers_index[cur_index2])continue;
-						// 	intervals.push_back((mapping){ii, k, -1});
-						// 	continue;
-						// }
-
-						mapping& last_interval = intervals.back();
+						last_interval& l_interval = last_intervals[rc][chromo][j];
+						iend = l_interval.loc + l_interval.len;
 
 						// Else end last interval and start new one
-						//if((ii-(last_interval.loc + last_interval.len) > 1)){// && contig_kmers_index[cur_index2]){ //-1 dup, -1 trans
-						if((ii1 > (last_interval.loc + last_interval.len))){
+						if(iend < ii1){
+
+							// Get last interval for this contig
+ 							vector<mapping>& intervals = contig_mappings[rc][chromo][j];
 
 							// Check if sufficiently long
-							if(last_interval.len < ANCHOR_SIZE){
-								intervals.pop_back();
-pop_back1++;
-							}
-							else if(repeat[rc][chromo][j] > -1){
+							if(l_interval.len >= ANCHOR_SIZE){
+								if(intervals.size() > REPEAT_LIMIT1){//l_interval.repeat > -1){
 
-								//NOTE: This is not perfect since if the new minimum is large, later intervals larger than one of the initial 4 but less than the minimum, would be skipped.
-								if((chromo != all_contigs[j].cluster_chr || (abs(last_interval.loc+(last_interval.len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) || intervals.size() > REPEAT_LIMIT2){
+									//NOTE: This is not perfect since if the new minimum is large, later intervals larger than one of the initial 4 but less than the minimum, would be skipped.
+									if((chromo != all_contigs[j].cluster_chr || (abs(l_interval.loc+(l_interval.len/2) - all_contigs[j].cluster_loc) > (MAX_ASSEMBLY_RANGE*2))) || intervals.size() > REPEAT_LIMIT2){
 
-									if(last_interval.len > intervals[repeat[rc][chromo][j]].len){
-										intervals[repeat[rc][chromo][j]].loc = last_interval.loc;
-										intervals[repeat[rc][chromo][j]].len = last_interval.len;
+										if(l_interval.len > intervals[l_interval.repeat].len){
+											intervals[l_interval.repeat].loc = l_interval.loc;
+											intervals[l_interval.repeat].len = l_interval.len;
+										}
+		pop_back2++;
 									}
-									intervals.pop_back();
-pop_back2++;
+									else{
+										
+										if(l_interval.len < intervals[l_interval.repeat].len){
+											l_interval.repeat = intervals.size()-1;
+										}
+
+										mapping& cur_interval = intervals.back();
+										cur_interval.loc = l_interval.loc;
+										cur_interval.len = l_interval.len;
+										if(l_interval.len < intervals[l_interval.repeat].len)l_interval.repeat = intervals.size()-1;
+										intervals.push_back((mapping){ii, k, -1});
+										
+									}
 								}
 								else{
-									if(last_interval.len < intervals[repeat[rc][chromo][j]].len){
-										repeat[rc][chromo][j] = intervals.size()-1;
-									}
+									mapping& cur_interval = intervals.back();
+									cur_interval.loc = l_interval.loc;
+									cur_interval.len = l_interval.len;
+									if(l_interval.len < intervals[l_interval.repeat].len)l_interval.repeat = intervals.size()-1;
+									intervals.push_back((mapping){ii, k, -1}); 
 								}
 							}
 
-							// Set repeat flag
-							if(intervals.size() > REPEAT_LIMIT1 && repeat[rc][chromo][j] == -1){
-								repeat[rc][chromo][j] = 0;
-								for(x = 1; x < intervals.size(); x++){
-									if(intervals[x].len < intervals[repeat[rc][chromo][j]].len){
-										repeat[rc][chromo][j] = x;
-									}
-								}
-							}
+							l_interval.loc = ii;
+							l_interval.len = k;
 
-							// Create new interval
-							intervals.push_back((mapping){ii, k, -1}); 
 						}
 						// Extend interval by one
-						else if(last_interval.loc == iik1-last_interval.len){  
-							last_interval.len++;
+						else if(iend == iik1){
+							l_interval.len++;
 						}
 						// Extend interval by k+1 if a SNP/SNV is detected
-						else if((ii1 == (last_interval.loc + last_interval.len))){ 
-							last_interval.len += (k+1);
+						else if(iend == ii1){
+							l_interval.len += (k+1);
 						}
 
 					//	if(LOCAL_MODE)break;
@@ -1013,7 +1013,7 @@ if(contig_len > max_con_len)max_con_len = contig_len;
 
 				for(auto &interval: contig_mappings[rc][chromo][j]){
 
-					if(interval.len+k+1 >= MAX_INTERVAL_LEN)continue;
+					if(interval.len+k+1 >= MAX_INTERVAL_LEN || interval.len > contig_len)continue; // only need the latter
 
 //STATS
 if(PRINT_STATS){
@@ -1037,14 +1037,8 @@ int sub_count = 0;
 					
 					ii = interval.loc - gen_start;// + 1;
 					len = interval.len-k+1;
-					interval_len = interval.len+k+1; //maybe off by one						
-
-					for(x=0; x < interval_len; x++){
-					 	ref_counts[x] = 0;
-						for(y=0; y < contig_len; y++){
-							valid_mappings[x][y] = false;
-						}
-					}
+					interval_len = interval.len+k+1; //maybe off by one	
+					con_repeat = false;					
 
 					cur_index = 0;
 
@@ -1076,55 +1070,56 @@ int sub_count = 0;
 
 						if(!contig_kmers_index[cur_index])continue;
 						if(binary_search(contig_kmers[contig_kmers_index[cur_index]].begin(), contig_kmers[contig_kmers_index[cur_index]].end(), j)){
-							//ref_counts[x] = 0;
 
-								// Build diagonals
+							// Build diagonals
 							for(auto &loc: kmer_locations[j][cur_index]){
 
 								valid_mappings[i][loc] = true;
-								valid_mappings[i+1][loc+1] = false;
-								valid_mappings[i+k+1][loc+k+1] = false;
-								ref_counts[i]++;
 
 								// Record starts when interval no longer consecutive
 								if(i == 0 || loc == 0){
 									starts.push_back({i,loc});
 								}
-								else if(i <= k+1 && loc <= k+1 && !valid_mappings[i-1][loc-1]){
+								else if((i < k+1 || loc < k+1) && !valid_mappings[i-1][loc-1]){
 									starts.push_back({i,loc});
 								}
-								else if(i > k+1 && loc > k+1 && (!valid_mappings[i-1][loc-1] && !valid_mappings[i-k-2][loc-k-2])){
+								else if(!valid_mappings[i-1][loc-1] && !valid_mappings[i-k-1][loc-k-1]){
 									starts.push_back({i,loc});
 								}
 							}	
+						}
+
+						if(starts.size() > CON_REPEAT_LIMIT){
+							con_repeat = true;
+							break;
 						}
 					}
 
 if(starts.size() > max_starts)max_starts = starts.size();
 
-					//if(starts.size() > CON_REPEAT_LIMIT)continue;
 
 					// Check each start point
 					for(auto& start : starts){
 
 						x = start.first;
 						y = start.second;
-						con_repeat = false;
+						
 
 						// Traverse diagonal
-						while(x < interval.len && y < contig_seq.length() && valid_mappings[x++][y++]){
+						while(x < interval.len && y < contig_seq.length() && valid_mappings[x][y]){
+							valid_mappings[x++][y++] = false;
 							if(y+k < contig_seq.length()){
-								if(!valid_mappings[x][y] && valid_mappings[x+k][y+k]){
-									x +=k;
-									y +=k;
-								}
-								else if(!valid_mappings[x][y] && contig_seq[y+k] == 'N'){
-									valid_mappings[x][y] = true;
+								if(!valid_mappings[x][y]){
+									if(valid_mappings[x+k][y+k]){
+										x +=k;
+										y +=k;
+									}
 								}
 							}
 						}
-						x-=2;
-						y-=2;
+
+						x--;
+						y--;
 
 						ilen = (y - start.second)+k;
 
@@ -1132,28 +1127,15 @@ if(starts.size() > max_starts)max_starts = starts.size();
 						//TODO: Use this table to identify duplications, although maybe no point since all can be found without this
 
 
-						if(ilen > ANCHOR_SIZE){
-
-							// Ignore repetitive sequences within contig
-							for(z = start.first; z <= x; z++){
-								if(ref_counts[z] > CON_REPEAT_LIMIT){
-									con_repeat = true;
-								}
-								else{
-									con_repeat = false;
-									break;
-								}
-							}
+						if(ilen > ANCHOR_SIZE && !con_repeat){
 
 							//Add to final list of intervals
-							if(!con_repeat){
-sub_count++;
-								mapping sub_interval;
-								sub_interval.loc = interval.loc + start.first;
-								sub_interval.len = ilen;
-								sub_interval.con_loc = y;
-								valid_intervals.push_back(sub_interval); 
-							}
+							mapping sub_interval;
+							sub_interval.loc = interval.loc + start.first;
+							sub_interval.len = ilen;
+							sub_interval.con_loc = y;
+							valid_intervals.push_back(sub_interval); 
+sub_count++;							
 if(sub_count > max_sub)max_sub = sub_count;
 						}
 					}

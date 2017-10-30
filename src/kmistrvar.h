@@ -19,16 +19,16 @@ class kmistrvar : public variant_caller
 {
 private:
 
-	const int MAX_READS_PER_PART = 10000;
+	const int MAX_READS_PER_PART = 10000;//2000 losses 1 Del, but -10min on WES;
 	const int MAX_INTERVALS = 100000;
 	//const int MAX_INTERVAL_LEN = 10000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
 	const int CON_NUM_DEBUG = -10235;
-	const int REPEAT_LIMIT1 = 5;   //distant
+	const int REPEAT_LIMIT1 = 6;   //distant 5
 	const int REPEAT_LIMIT2 = 50;  //close
 	const int REPEAT_LIMIT3 = 400; //total 400
-	const int CON_REPEAT_LIMIT = 2;
+	const int CON_REPEAT_LIMIT = 20;//2;
 	const int ANCHOR_SIZE = 40;
 	const bool USE_ANNO = true;
 	const bool PRINT_READS = true;
@@ -67,17 +67,23 @@ private:
 		int id2;
 	};
 
-	vector<contig> all_contigs;
+	struct last_interval{
+		long loc;
+		int len;
+		short repeat;
+	};
+
+	vector<contig> all_contigs; // 10% of memory
 	vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
 	vector<string> contexts ={"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
 	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
-	vector<short>** repeat;
+	vector<last_interval>** last_intervals;
 	vector<vector<int>> contig_kmers;
 	vector<int> contig_kmer_counts;
 	map <string,vector<isoform>> iso_gene_map;
 	map <string,vector<gene_data>> gene_sorted_map;
-	int* contig_kmers_index; 
+	int* contig_kmers_index;  // 35% of memeory at k=14
 	vector<unordered_map<long long, vector<int>>> kmer_locations;
 	long long kmer_mask;
 	int num_kmer;
@@ -99,7 +105,7 @@ private:
 	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1, int id2, mapping_ext m1, mapping_ext m2, mapping_ext m3, mapping_ext m4, string type);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
-	void assemble(const string &range, int min_support, const bool LOCAL_MODE, int ref_flank);
+	void assemble(const string &range, int min_support, int max_support, const bool LOCAL_MODE, int ref_flank);
 	void generate_intervals(const bool LOCAL_MODE);
 	void predict_variants(const string &out_vcf, const string &out_full, int uncertainty, int min_length, int max_length);
 	bool bfs(const int DEPTH, int** rGraph, int s, int t, int parent[]);
@@ -109,6 +115,6 @@ public:
 	
 	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes);
 	~kmistrvar();
-	void run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank);
+	void run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank);
 };
 #endif
