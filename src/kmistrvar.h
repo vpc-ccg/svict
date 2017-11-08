@@ -35,7 +35,6 @@ private:
 	const bool PRINT_STATS = false;
 	const bool USE_BARCODES = false;
 
-
 	struct mapping{
 		long loc;// : 29; 
 		int len;// : 14;  // up to 16,383
@@ -81,12 +80,13 @@ private:
 	vector<last_interval>** last_intervals;
 	vector<vector<int>> contig_kmers;
 	vector<int> contig_kmer_counts;
+	vector<unordered_map<int, vector<int>>> kmer_locations;
 	map <string,vector<isoform>> iso_gene_map;
 	map <string,vector<gene_data>> gene_sorted_map;
+	unsigned long long kmer_mask;
+	bool** valid_mappings;
 	int* contig_kmers_index;  // 35% of memeory at k=14
-	vector<unordered_map<long long, vector<int>>> kmer_locations;
-	long long kmer_mask;
-	int num_kmer;
+	unsigned long long num_kmer;
 	int k;
 	int num_intervals;
 
