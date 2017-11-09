@@ -19,12 +19,11 @@ class kmistrvar : public variant_caller
 {
 private:
 
-	const int MAX_READS_PER_PART = 10000;//2000 losses 1 Del, but -10min on WES;
+	const int MAX_READS_PER_PART = 10000;//2000 losses 1 Del, but -10min on WES; 
 	const int MAX_INTERVALS = 100000;
-	//const int MAX_INTERVAL_LEN = 10000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -10235;
+	const int CON_NUM_DEBUG = -153098;
 	const int REPEAT_LIMIT1 = 6;   //distant 5
 	const int REPEAT_LIMIT2 = 50;  //close
 	const int REPEAT_LIMIT3 = 400; //total 400

@@ -449,7 +449,7 @@ int main(int argc, char* argv[])
 			("s", "Min Read Support (default 2)", cxxopts::value<int>()->default_value("2"), "INT")
 			("S", "Max Read Support (default unlimited)", cxxopts::value<int>()->default_value("999999"), "INT")
 			("u", "Uncertainty (default 8)", cxxopts::value<int>()->default_value("8"), "INT")
-			("m", "Min SV length (default 10)", cxxopts::value<int>()->default_value("40"), "INT")
+			("m", "Min SV length (default 40)", cxxopts::value<int>()->default_value("40"), "INT")
 			("M", "Max SV length (default 20000)", cxxopts::value<int>()->default_value("20000"), "INT")
 			("h,help", "Print help");
 

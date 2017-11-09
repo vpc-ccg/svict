@@ -171,7 +171,7 @@ kmistrvar::mapping_ext kmistrvar::copy_interval(char chr, bool rc, int con_id, m
 }
 
 void kmistrvar::print_interval(string label, mapping_ext& interval){
-	cout << label << "\tRef_Loc: " << interval.loc << "-" << (interval.loc+interval.len) << "\tCon_Loc: " << ((interval.con_loc+k)-interval.len) << "-" << (interval.con_loc+k) 
+	cerr << label << "\tRef_Loc: " << interval.loc << "-" << (interval.loc+interval.len) << "\tCon_Loc: " << ((interval.con_loc+k)-interval.len) << "-" << (interval.con_loc+k) 
 		 << "\tLen:" << interval.len << "\tChr: " << chromos[interval.chr] << "\tRC: " << interval.rc << "\tCon_ID: " << interval.con_id << endl; 
 }
 
@@ -625,7 +625,7 @@ if(PRINT_STATS){
 	contig_count2++; 
 	support_count += contig.support();	
 
-	if(pt.get_start() == 13322962){
+	if(pt.get_start() == 55180921){
 		//cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
 		//cout << contig.data << endl;
 	}
@@ -709,6 +709,7 @@ if(PRINT_STATS){
 						}
 					}
 					kmer_locations[contig_id][cur_index].push_back(i); 
+					
 				}
 				contig_id++;
 			}
@@ -1077,9 +1078,7 @@ int sub_count = 0;
 
 						int& kmer_index = contig_kmers_index[cur_index];
 
-						if(!kmer_index)continue;
-
-						if(binary_search(contig_kmers[kmer_index].begin(), contig_kmers[kmer_index].end(), j)){
+						if(!kmer_index || binary_search(contig_kmers[kmer_index].begin(), contig_kmers[kmer_index].end(), j)){
 
 							for(auto &loc: kmer_locations[j][kmer_index]){
 
@@ -1279,8 +1278,8 @@ if(PRINT_STATS){
 		interval_count = 1;
 
 		// Sort intervals by contig location
-		for(char chr=0; (id <= REPEAT_LIMIT3) && chr < 25; chr++){  //(interval_count <= REPEAT_LIMIT3) && 
-			for(rc=0;  (id <= REPEAT_LIMIT3) && rc <= use_rc; rc++){ //(interval_count <= REPEAT_LIMIT3) &&
+		for(char chr=0; (id <= REPEAT_LIMIT3) && chr < 25; chr++){  
+			for(rc=0;  (id <= REPEAT_LIMIT3) && rc <= use_rc; rc++){ 
 				if(!contig_mappings[rc][chr][j].empty()){
 					for(auto &interval: contig_mappings[rc][chr][j]){          
 						cur_interval = copy_interval(chr, rc, j, interval);
@@ -1529,7 +1528,7 @@ anchor_fails++;
 					 				chromo_dist = i1.loc-(i2.loc+i2.len);
 
 					 				//DUP
-					 				if(i2.loc+i2.len-i1.loc >= max(ANCHOR_SIZE, uncertainty+1) && i2.loc+i2.len-i1.loc < max_length && abs(contig_dist) <= uncertainty){
+					 				if(i2.loc+i2.len-i1.loc >= max(min_length, uncertainty+1) && i2.loc+i2.len-i1.loc < max_length && abs(contig_dist) <= uncertainty){
 						 				print_variant(fo_vcf, fr_vcf, fo_full, j, i1, i2, "DUP");
 short_dup1++;
 						 			}
@@ -1568,7 +1567,8 @@ short_inv1++;
 					 			//Positive Strand
 					 			else{ 
 					 				//DUP
-					 				if(i1.loc+i1.len-i2.loc >= max(ANCHOR_SIZE, uncertainty+1) && i1.loc+i1.len-i2.loc < max_length && abs(contig_dist) <= uncertainty){
+					 				if(i1.loc+i1.len-i2.loc >= max(min_length, uncertainty+1) && i1.loc+i1.len-i2.loc < max_length && abs(contig_dist) <= uncertainty){
+
 						 				print_variant(fo_vcf, fr_vcf, fo_full, j, i1, i2, "DUP");
 short_dup2++;
 						 			}
@@ -1752,7 +1752,7 @@ if(j == CON_NUM_DEBUG){
 		}
 		cerr << endl;
 		for(int i = path.size()-1; i >= 0; i--){
-			cerr << intervals[lookup[path[i]].first][lookup[path[i]].second].loc << "-" << intervals[lookup[path[i]].first][lookup[path[i]].second].loc + intervals[lookup[path[i]].first][lookup[path[i]].second].len << "\t";
+			cerr << intervals[lookup[path[i]].first][lookup[path[i]].second].con_loc+k - intervals[lookup[path[i]].first][lookup[path[i]].second].len << "-" << intervals[lookup[path[i]].first][lookup[path[i]].second].con_loc+k << "\t";
 		}
 		cerr << endl;
 	}
