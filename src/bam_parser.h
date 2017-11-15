@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <zlib.h>
 
+#include "common.h"
 #include "parser.h"
 #include "record.h"
 
@@ -25,7 +26,7 @@ class BAMParser: public Parser {
 
 public:
 	BAMParser (const std::string &filename);
-	~BAMParser ();
+	~BAMParser (void);
 
 private:
 	void readChromosomeInformation(void);
@@ -40,7 +41,7 @@ public:
 
 public:
 	void parse (void);
-	const Record &next (void);
+	Record next (void);
 	std::string head (void);
 };
 

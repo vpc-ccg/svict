@@ -20,12 +20,11 @@
 #include "record.h"
 #include "sam_parser.h"
 #include "bam_parser.h"
-#include "extractor.h"
 #include "sort.h"
 
 using namespace std;
 
-char versionNumber[10]="1.0.0";
+
 // 10.46
 // S:[step]:END
 
@@ -422,13 +421,7 @@ void annotate (string gtf, string in_file, string out_file, bool genomic) {
 
 	
 }
-/**********************************************/
-void printHELP()
-{
-	fprintf(stdout, "CellFreeSV: Structural Variant Calling in cfDNA Sequencing Data\n");
-	fprintf(stdout, "\t-h|--help:\tShows help message.\n");
-	fprintf(stdout, "\t-v|--version:\tShows current version.\n");
-}
+
 /********************************************************************/
 int main(int argc, char *argv[])
 {
@@ -437,28 +430,28 @@ int main(int argc, char *argv[])
 
 	string	input_sam  = "" ,
 			reference  = "" ,
-			out_prefix = "out" ,
+			out_prefix = "" ,
 			annotation = "" ;
-	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 40, M = 20000;
+	int threshold, k, a, s, S, u, m, M;
 	bool barcodes = false;
-	int sam_flag = 0;
+	//int gtf_flag = 0;//sam_flag = 0;
 
 	static struct option long_opt[] =
 	{
 		{ "help", no_argument, 0, 'h' },
-		{ "version", no_argument, 0, 'v' },
-		{ "input", required_argument, 0, 'i' },
-		{ "reference", required_argument, 0, 'r' },
-		{ "output", required_argument, 0, 'o' },
-		{ "barcodes", no_argument, 0, 'b' },
-		{ "cluster", required_argument, 0, 'c' },
-		{ "kmer", required_argument, 0, 'k' },
-		{ "anchor", required_argument, 0, 'a' },
-		{ "min_support", required_argument, 0, 's' },
-		{ "max_support", required_argument, 0, 'S' },
-		{ "uncertainty", required_argument, 0, 'u' },
-		{ "min_support", required_argument, 0, 'm' },
-		{ "max_support", required_argument, 0, 'M' },
+		{ "version", no_argument, 0, 'v'},
+		{ "input", required_argument, 0, 'i'},
+		{ "reference", required_argument, 0, 'r'},
+		{ "output", required_argument, 0, 'o'},
+		{ "barcodes", required_argument, 0, 'b'},
+		{ "cluster", required_argument, 0, 'c'},
+		{ "kmer", required_argument, 0, 'k'},
+		{ "anchor", required_argument, 0, 'a'},
+		{ "min_support", required_argument, 0, 's'},
+		{ "max_support", required_argument, 0, 'S'},
+		{ "uncertainty", required_argument, 0, 'u'},
+		{ "min_support", required_argument, 0, 'm'},
+		{ "max_support", required_argument, 0, 'M'},
 		{0,0,0,0},
 	};
 
@@ -469,76 +462,23 @@ int main(int argc, char *argv[])
 			case 'h':
 				printHELP();
 				return 0;
+				//break;
 			case 'v':
-				fprintf(stdout, "%s\n", versionNumber );
+				L("%s.%s\n", versionNumber, versionNumberF);
 				return 0;
-			case 'b':
-				barcodes = true; 
-				return 0;
+				//break;
 			case 'i':
 				input_sam.assign( optarg );
-				sam_flag = 1;
 				break;
 			case 'r':
-				reference.assign( optarg );
+				reference_sam.assign( optarg );
 				break;
-			case 'o':
-				out_prefix.assign( optarg );
-				break;
-			case 'g':
-				annotation.assign( optarg );
-				break;
-			case 'c':
-				threshold = atoi(optarg);
-				break;
-			case 'k':
-				k = atoi(optarg);
-				break;
-			case 'a':
-				a = atoi(optarg);
-				break;
-			case 's':
-				s = atoi(optarg);
-				break;
-			case 'S':
-				S = atoi(optarg);
-				break;
-			case 'u':
-				u = atoi(optarg);
-				break;
-			case 'm':
-				m = atoi(optarg);
-				break;
-			case 'M':
-				M = atoi(optarg);
-				break;
-			case '?':
-				fprintf(stderr, "Unknown parameter: %s\n", long_opt[opt_index].name);
-				return 1;
-			default:
-				printHELP();
-				return 0;
 		}
 	}
 
-	
-	// sanity checking
-	if( threshold < 0 ){
-		fprintf(stderr, "Cluster threshold must be a positive integer\n");
-		}
-	
-	if( k < 5 ) {
-		fprintf(stderr, "K must be greater than 5\n");
-		}
-	
-
-	//if ( sam_flag )
-	//{
-	//	extractor ext( argv[2], argv[3], atoi(argv[4]), atoi(argv[5]), atoi(argv[6]), stod(argv[7]));
-	//}	
+	fprintf(stderr, "%s\n", input_sam.c_str());
 
 
-	//predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, S, u, m, M, 0, 0);
 
 }
 
