@@ -75,10 +75,10 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 }
 
 /********************************************************************/
-void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const string &range, const string &out_vcf, const string &out_full, 
+void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const string &range, const string &out_vcf, const string &out_full, 
 					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
 {
-	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes);
+	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads);
 	predictor.run_kmistrvar(range, out_vcf, out_full, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, ref_flank);
 }
 
@@ -434,6 +434,7 @@ int main(int argc, char* argv[])
 		string input_sam, reference, out_prefix, annotation;
 		int threshold, k, a, s, S, u, m, M;
 		bool barcodes = false;
+		bool print_reads = false;
 
 		//[kmer-length] [min-support] [uncertainty] [local-assembly] [local-mode] [reference-flank]
 
@@ -443,13 +444,14 @@ int main(int argc, char* argv[])
 			("o,output", "Output prefix", cxxopts::value<std::string>()->default_value("out"), "PREFIX")
 			("g,annotation", "GTF annotation file", cxxopts::value<std::string>()->default_value(""), "FILE")  //TODO handle old and new
 			("b,barcodes", "Input reads contain barcodes", cxxopts::value<bool>(barcodes))
+			("p", "print reads (WARNING: >4GB may be required for large datasets)", cxxopts::value<bool>(print_reads))
 			("c", "Clustering threshold (default 1000)", cxxopts::value<int>()->default_value("1000"), "INT")
 			("k", "Kmer length (default 14)", cxxopts::value<int>()->default_value("14"), "INT")
 			("a", "Anchor length (default 40)", cxxopts::value<int>()->default_value("40"), "INT")
 			("s", "Min Read Support (default 2)", cxxopts::value<int>()->default_value("2"), "INT")
 			("S", "Max Read Support (default unlimited)", cxxopts::value<int>()->default_value("999999"), "INT")
 			("u", "Uncertainty (default 8)", cxxopts::value<int>()->default_value("8"), "INT")
-			("m", "Min SV length (default 40)", cxxopts::value<int>()->default_value("40"), "INT")
+			("m", "Min SV length (default 60)", cxxopts::value<int>()->default_value("60"), "INT")
 			("M", "Max SV length (default 20000)", cxxopts::value<int>()->default_value("20000"), "INT")
 			("h,help", "Print help");
 
@@ -541,7 +543,7 @@ int main(int argc, char* argv[])
 
 		cout << "Running with parameters: k=" << k << " a=" << a << " s=" << s << " u=" << u << " m=" << m << " M=" << M << endl;
 
-		predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, S, u, m, M, 0, 0);
+		predict(input_sam, reference, annotation, barcodes, print_reads, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, S, u, m, M, 0, 0);
 
 	} catch (const cxxopts::OptionException& e)
 	{

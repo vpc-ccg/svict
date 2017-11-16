@@ -12,6 +12,7 @@
 #include "assembler_ext.h"
 #include "genome.h"
 #include "annotation.h"
+#include "../include/tsl/sparse_map.h"
 
 using namespace std;
 
@@ -19,18 +20,18 @@ class kmistrvar : public variant_caller
 {
 private:
 
-	const int MAX_READS_PER_PART = 10000;//2000 losses 1 Del, but -10min on WES; 
+	const int MAX_READS_PER_PART = 10000;//2000 losses 1 Del, but -10min on WES;
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -153098;
+	const int CON_NUM_DEBUG = -1000;
 	const int REPEAT_LIMIT1 = 6;   //distant 5
 	const int REPEAT_LIMIT2 = 50;  //close
 	const int REPEAT_LIMIT3 = 400; //total 400
 	const int CON_REPEAT_LIMIT = 20;//2;
 	const int ANCHOR_SIZE = 40;
 	const bool USE_ANNO = true;
-	const bool PRINT_READS = true;
+	const bool PRINT_READS = false;
 	const bool PRINT_STATS = false;
 	const bool USE_BARCODES = false;
 
@@ -66,20 +67,22 @@ private:
 	};
 
 	struct last_interval{
-		long loc;
-		int len;
-		short repeat;
+		long loc;				//64
+		unsigned int len;		//16
+		unsigned short repeat;	//8
 	};
 
 	vector<contig> all_contigs; // 10% of memory
+	vector<compressed_contig> all_compressed_contigs; 
 	vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
 	vector<string> contexts ={"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
 	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
 	vector<last_interval>** last_intervals;
+	vector<pair<int,char>> cluster_info;
 	vector<vector<int>> contig_kmers;
 	vector<int> contig_kmer_counts;
-	vector<unordered_map<int, vector<int>>> kmer_locations;
+	vector<tsl::sparse_map<int, vector<int>>> kmer_locations;
 	map <string,vector<isoform>> iso_gene_map;
 	map <string,vector<gene_data>> gene_sorted_map;
 	unsigned long long kmer_mask;
@@ -98,7 +101,9 @@ private:
 	void init();
 	vector<string> split(string str, char sep = ' ');
 	string itoa (int i);
-	pair<int,pair<int,int>> compute_support(contig contig, int start, int end);
+	string con_string(int& id, int start, int len);
+	compressed_contig compress(contig& con);
+	pair<unsigned short,pair<unsigned short,unsigned short>> compute_support(int& id, int start, int end);
 	vector<pair<pair<string, string>, int>> correct_reads(vector<pair<pair<string, string>, int>> reads);
 	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id, mapping_ext m1, mapping_ext m2, string type);
 	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1, int id2, mapping_ext m1, mapping_ext m2, mapping_ext m3, mapping_ext m4, string type);
@@ -112,7 +117,7 @@ private:
 	
 public:
 	
-	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes);
+	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads);
 	~kmistrvar();
 	void run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank);
 };

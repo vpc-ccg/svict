@@ -37,7 +37,7 @@ bool assembler::validate(const string &a, const string &b, int sz)
 	return true;
 }
 
-vector<contig> assembler::assemble(vector<pair<pair<string, string>, int>> reads) 
+vector<contig> assembler::assemble(vector<pair<pair<string, string>, int>>& reads) 
 {
 
 	auto lens = set<int>();

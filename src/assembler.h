@@ -14,11 +14,14 @@ struct Read {
 	int location_in_contig;
 };
 
+struct compressed_contig {
+	vector<bool> data;
+	vector<unsigned short> coverage;
+};
+
 struct contig {
 	string data;
 	vector<Read> read_information;
-	char cluster_chr;
-	int cluster_loc;
 
 	int support (void) const { 
 		return read_information.size();
@@ -53,5 +56,5 @@ public:
 	vector<int> topsort();
 
 public:
-	vector<contig> assemble(vector<pair<pair<string, string>, int>> reads);
+	vector<contig> assemble(vector<pair<pair<string, string>, int>>& reads);
 };
