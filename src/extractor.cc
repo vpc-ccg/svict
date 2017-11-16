@@ -8,7 +8,7 @@
 
 using namespace std;
 
-
+// 4 is mainly for unmapped format used for building partition
 /****************************************************************/
 inline void output_record(FILE *fp, int ftype, const Record &rc)
 {
@@ -39,6 +39,10 @@ inline void output_record(FILE *fp, int ftype, const Record &rc)
 				rc.getQuality(),
 				rc.getOptional()
 				);
+	else if ( ftype == 4 )
+	{
+		record = S("@%s %s\n", rc.getReadName(), seq.c_str() );
+	}
 
 	fwrite(record.c_str(), 1, record.size(), fp);
 }
@@ -402,13 +406,13 @@ int examine_mapping( const Record &rc, map<string, Record > &map_read, FILE *f_m
 					if ( mate_flag )
 					{
 						output_record( f_map, ftype, rc);
-						output_record( f_unmap, ftype, rc2);
+						output_record( f_unmap, 4, rc2);
 						if ( (min_length < 0 ) || ( strlen(rc.getSequence()) < min_length ) ){ min_length = strlen(rc.getSequence());}
 					}
 					else
 					{
 						output_record( f_map, ftype, rc2);
-						output_record( f_unmap, ftype, rc);
+						output_record( f_unmap, 4, rc);
 						if ( (min_length < 0 ) || ( strlen(rc2.getSequence()) < min_length ) ){ min_length = strlen(rc2.getSequence());}
 					}
 					
@@ -418,29 +422,29 @@ int examine_mapping( const Record &rc, map<string, Record > &map_read, FILE *f_m
 					if ( mate_flag )
 					{
 						output_record( f_map, ftype, rc2);
-						output_record( f_unmap, ftype, rc);
+						output_record( f_unmap, 4, rc);
 						if ( (min_length < 0 ) || ( strlen(rc2.getSequence()) < min_length ) ){ min_length = strlen(rc2.getSequence());}
 					}
 					else
 					{
 						output_record( f_map, ftype, rc);
-						output_record( f_unmap, ftype, rc2);
+						output_record( f_unmap, 4, rc2);
 						if ( (min_length < 0 ) || ( strlen(rc.getSequence()) < min_length ) ){ min_length = strlen(rc.getSequence());}
 					}
 				}
 				
-				// interleaved files for genotyping
-				if ( ( 0x40 == ( 0x40 & rc.getMappingFlag() ) ) )
-				{
-					output_record( f_int, 2, rc);
-					output_record( f_int, 2, rc2);
+				//// interleaved files for genotyping
+				//if ( ( 0x40 == ( 0x40 & rc.getMappingFlag() ) ) )
+				//{
+				//	output_record( f_int, 2, rc);
+				//	output_record( f_int, 2, rc2);
 
-				}
-				else
-				{
-					output_record( f_int, 2, rc2);
-					output_record( f_int, 2, rc);
-				}
+				//}
+				//else
+				//{
+				//	output_record( f_int, 2, rc2);
+				//	output_record( f_int, 2, rc);
+				//}
 			}
 		}
 
@@ -472,8 +476,8 @@ extractor::extractor(string filename, string output_prefix, int ftype, int oea, 
 	fall_int  = fopen ((output_prefix + "all_interleaved.fastq").c_str(), "w");
 	if (oea) 
 	{
-		string foea_mapped_name = output_prefix + "oea.mapped."+extensions[ftype];
-		string foea_unmapped_name = output_prefix + "oea.unmapped."+extensions[ftype];
+		string foea_mapped_name = output_prefix + ".anchor";//oea.mapped."+extensions[ftype];
+		string foea_unmapped_name = output_prefix + ".unmapped";//."+extensions[ftype];
 		foea_mapped  = fopen (foea_mapped_name.c_str(), "w");
 		foea_unmapped  = fopen (foea_unmapped_name.c_str(), "w");
 	}
@@ -551,9 +555,9 @@ extractor::extractor(string filename, string output_prefix, int ftype, int oea, 
 	//ERROR( "\nFinal %u %u %u \n", map_read.size(), map_orphan.size(), map_oea.size() );
 	//fclose(ftest);
 	
-	f_min_length  = fopen ((output_prefix + "min_length").c_str(), "w");
-	fprintf(f_min_length, "%d\n", min_length);
-	fclose( f_min_length);
+	//f_min_length  = fopen ((output_prefix + "min_length").c_str(), "w");
+	//fprintf(f_min_length, "%d\n", min_length);
+	//fclose( f_min_length);
 	// close file
 	if (oea)
 	{

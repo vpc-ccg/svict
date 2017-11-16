@@ -425,9 +425,30 @@ void annotate (string gtf, string in_file, string out_file, bool genomic) {
 /**********************************************/
 void printHELP()
 {
-	fprintf(stdout, "CellFreeSV: Structural Variant Calling in cfDNA Sequencing Data\n");
-	fprintf(stdout, "\t-h|--help:\tShows help message.\n");
-	fprintf(stdout, "\t-v|--version:\tShows current version.\n");
+	LOG( "SVICT: Structural Variant In CTDNA Sequencing Data\n");
+	LOG( "\t-h|--help:\tShows help message.");
+	LOG( "\t-v|--version:\tShows current version.");
+	LOG( "\t\nMandatory Parameters:");
+	LOG( "\t-i|--input:\tInput file. (SAM/BAM for making partition; partition for SV detection.)");
+	LOG( "\t-o|--output:\tPrefix or output file");
+	LOG( "\t\nParameters for Supplementary Information:");
+	LOG( "\t-r|--reference:\tReference Genome. Required for SV detection." );
+	LOG( "\t-g|--annotation:\tGTF file for gene annotation." );
+	LOG( "\t-x|--unmapped:\tUnmapped reads file for generating paritions.");
+	LOG( "\t\nOptional Parameters:");
+	LOG( "\t-b|--barcode:\tInput reads contain barcodes.");
+	LOG( "\t-c|--cluster:\tClustering threshold (default 1000).");
+	LOG( "\t-k|--kmer:\tKmer length (default 14).");
+	LOG( "\t-a|--anchor:\tAnchor length (default 40).");
+	LOG( "\t-s|--min_support:\tMin Read Support (default 2).");
+	LOG( "\t-S|--max_support:\tMax Read Support (default unlimited).");
+	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
+	LOG( "\t-m|--min_support:\tMin SV length (default 40).");
+	LOG( "\t-M|--max_support:\tMax SV length (default 20000).");
+	LOG( "\t\nExample Command:");
+	LOG( "\t./SVICT -i input.sam -o tmp");
+	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o partition");
+	LOG( "\t./SVICT -i partition -r human_genome.fa -o final");
 }
 /********************************************************************/
 int main(int argc, char *argv[])
@@ -438,10 +459,14 @@ int main(int argc, char *argv[])
 	string	input_sam  = "" ,
 			reference  = "" ,
 			out_prefix = "out" ,
-			annotation = "" ;
+			annotation = "" ,
+			unmapped   = "" ;
 	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 40, M = 20000;
 	bool barcodes = false;
-	int sam_flag = 0;
+	int sam_flag  = 0, 
+		un_flag   = 0,
+		ref_flag  = 0;
+	int op_code   = 0;
 
 	static struct option long_opt[] =
 	{
@@ -450,6 +475,7 @@ int main(int argc, char *argv[])
 		{ "input", required_argument, 0, 'i' },
 		{ "reference", required_argument, 0, 'r' },
 		{ "output", required_argument, 0, 'o' },
+		{ "annotation", required_argument, 0, 'g' },
 		{ "barcodes", no_argument, 0, 'b' },
 		{ "cluster", required_argument, 0, 'c' },
 		{ "kmer", required_argument, 0, 'k' },
@@ -459,10 +485,11 @@ int main(int argc, char *argv[])
 		{ "uncertainty", required_argument, 0, 'u' },
 		{ "min_support", required_argument, 0, 'm' },
 		{ "max_support", required_argument, 0, 'M' },
+		{ "unmapped", required_argument, 0, 'x' },
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:b:c:k:a:s:S:u:m:M:", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:b:c:k:a:s:S:u:m:M:x:", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -481,12 +508,17 @@ int main(int argc, char *argv[])
 				break;
 			case 'r':
 				reference.assign( optarg );
+				ref_flag = 1;
 				break;
 			case 'o':
 				out_prefix.assign( optarg );
 				break;
 			case 'g':
 				annotation.assign( optarg );
+				break;
+			case 'x':
+				unmapped.assign( optarg );
+				un_flag   = 1;
 				break;
 			case 'c':
 				threshold = atoi(optarg);
@@ -524,209 +556,61 @@ int main(int argc, char *argv[])
 	
 	// sanity checking
 	if( threshold < 0 ){
-		fprintf(stderr, "Cluster threshold must be a positive integer\n");
+		ERROR( "Cluster threshold must be a positive integer\n");
+		return 0;
 		}
 	
 	if( k < 5 ) {
-		fprintf(stderr, "K must be greater than 5\n");
+		ERROR( "K must be greater than 5\n");
+		return 0;
 		}
+	if( a < k ) {
+		ERROR( "K must be less than or equal to anchor length\n");
+		return 0;
+		}
+	if( s < 2 ) {
+		ERROR( "Read support threshold must be an integer >= 2\n");
+		return 0;
+		}
+	if( s > S ) {
+		ERROR( "Min read support should be less than or equal to max read support\n");
+		return 0;
+		}
+	if ( u < 0 ){
+		ERROR( "Uncertainty must be a positive integer");
+		return 0;
+	}
+	if ( m <= u ){
+		ERROR( "Min SV length should be > uncertainty");
+		return 0;
+	}
+	if ( m > M ){
+		ERROR(  "Min SV length should be <= max SV length\n");
+		return 0;
+	}
+
 	
+	if ( 2 == sam_flag + ref_flag) { op_code = 3;}
+	else if ( 2 == sam_flag + un_flag) { op_code = 2;}
+	else if ( sam_flag )  { op_code = 1; }
+	else
+	{
+		ERROR("Ambiguous mode.\n");
+		printHELP();
+		return 0;
+	}
 
-	//if ( sam_flag )
-	//{
-	//	extractor ext( argv[2], argv[3], atoi(argv[4]), atoi(argv[5]), atoi(argv[6]), stod(argv[7]));
-	//}	
-
-
-	//predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, S, u, m, M, 0, 0);
-
+	if ( 1 == op_code  )
+	{
+		extractor ext( input_sam, out_prefix, 3, 1, 0, 0.99 );
+	}	
+	else if ( 2 == op_code  )
+	{
+		partify( input_sam, unmapped, ( out_prefix + ".partition"), threshold );
+	}	
+	else
+	{
+		predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, S, u, m, M, 0, 0);
+	}
+	return 0;
 }
-
-
-
-//int main(int argc, char* argv[])
-//{
-//	try{
-//
-//		cxxopts::Options options(argv[0], "CellFreeSV: Structural Variant Calling in cfDNA Sequencing Data");
-//		options.positional_help("[optional args]");
-//		string input_sam, reference, out_prefix, annotation;
-//		int threshold, k, a, s, S, u, m, M;
-//		bool barcodes = false;
-//
-//		//[kmer-length] [min-support] [uncertainty] [local-assembly] [local-mode] [reference-flank]
-//
-//		options.add_options()
-//			("i,input", "Input SAM file (required)", cxxopts::value<std::string>(), "FILE")
-//			("r,reference", "Reference file (required)", cxxopts::value<std::string>(), "FILE")
-//			("o,output", "Output prefix", cxxopts::value<std::string>()->default_value("out"), "PREFIX")
-//			("g,annotation", "GTF annotation file", cxxopts::value<std::string>()->default_value(""), "FILE")  //TODO handle old and new
-//			("b,barcodes", "Input reads contain barcodes", cxxopts::value<bool>(barcodes))
-//			("c", "Clustering threshold (default 1000)", cxxopts::value<int>()->default_value("1000"), "INT")
-//			("k", "Kmer length (default 14)", cxxopts::value<int>()->default_value("14"), "INT")
-//			("a", "Anchor length (default 40)", cxxopts::value<int>()->default_value("40"), "INT")
-//			("s", "Min Read Support (default 2)", cxxopts::value<int>()->default_value("2"), "INT")
-//			("S", "Max Read Support (default unlimited)", cxxopts::value<int>()->default_value("999999"), "INT")
-//			("u", "Uncertainty (default 8)", cxxopts::value<int>()->default_value("8"), "INT")
-//			("m", "Min SV length (default 40)", cxxopts::value<int>()->default_value("40"), "INT")
-//			("M", "Max SV length (default 20000)", cxxopts::value<int>()->default_value("20000"), "INT")
-//			("h,help", "Print help");
-//
-//
-//		options.parse(argc, argv);
-//
-//		if (options.count("help")){
-//			std::cout << options.help({""}) << std::endl;
-//			exit(0);
-//		}
-//
-//		if (options.count("input")){
-//			input_sam = options["input"].as<std::string>();
-//
-//			ifstream f(input_sam.c_str());
-//			if(!f.good()){
-//				throw cxxopts::OptionException("Input file does not exist");
-//			}
-//		}
-//		else{
-//			throw cxxopts::OptionException("No input file specified");
-//		}
-//
-//		if (options.count("reference")){
-//			reference = options["reference"].as<std::string>();
-//
-//			ifstream f(reference.c_str());
-//			if(!f.good()){
-//				throw cxxopts::OptionException("Reference file does not exist");
-//			}
-//		}
-//		else{
-//			throw cxxopts::OptionException("No Reference file specified");
-//		}
-//
-//		out_prefix = options["output"].as<std::string>();
-//
-//		if (options.count("annotation")){
-//			annotation = options["annotation"].as<std::string>();
-//
-//			ifstream f(annotation.c_str());
-//			if(!f.good()){
-//				throw cxxopts::OptionException("Annotation file does not exist");
-//			}
-//		}
-//		
-//
-//		threshold = options["c"].as<int>();
-//		k = options["k"].as<int>();
-//		a = options["a"].as<int>();
-//		s = options["s"].as<int>();
-//		S = options["S"].as<int>();
-//		u = options["u"].as<int>();
-//		m = options["m"].as<int>();
-//		M = options["M"].as<int>();
-//
-//		if(threshold < 0){
-//			throw cxxopts::OptionException("Cluster threshold must be a positive integer");
-//		}
-//
-//		if(k < 5){
-//			throw cxxopts::OptionException("K must be greater than 5");
-//		}
-//		else if(k > a){
-//			throw cxxopts::OptionException("K must be <= anchor length");
-//		}
-//		
-//		if(s < 2){
-//			throw cxxopts::OptionException("Read support threshold must be >= 2");
-//		}
-//
-//		if(s > S){
-//			throw cxxopts::OptionException("Max read support should be <= max read support");
-//		}
-//
-//		if(u < 0){
-//			throw cxxopts::OptionException("Uncertainty must be a positive integer");
-//		}
-//
-//		if(m <= u){
-//			throw cxxopts::OptionException("Min SV length should be > uncertainty");
-//		}
-//
-//		if(m > M){
-//			throw cxxopts::OptionException("Min SV length should be <= max SV length");
-//		}
-//
-//		std::cout << "Arguments remain = " << argc << std::endl;
-//
-//		cout << "Running with parameters: k=" << k << " a=" << a << " s=" << s << " u=" << u << " m=" << m << " M=" << M << endl;
-//
-//		predict(input_sam, reference, annotation, barcodes, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, S, u, m, M, 0, 0);
-//
-//	} catch (const cxxopts::OptionException& e)
-//	{
-//		std::cout << "error parsing options: " << e.what() << std::endl;
-//		exit(1);
-//	}
-//
-//	return 0;
-//}
-//
-
-// int main(int argc, char **argv)
-// {
-// 	try {
-// 		if (argc < 2) throw "Usage:\tCellFreeSV [mode=(?)]";
-
-// 		string mode = argv[1];
-// 		if (mode == "fastq") {
-// 			if (argc < 4) throw "Usage:\tCellFreeSV fastq [sam-file] [output]";
-// 			extractOEA(argv[2], argv[3], argc == 4 ? true : false);
-// 		}
-// 		else if (mode == "oea") {
-// 			if (argc != 4) throw "Usage:\tCellFreeSV oea [sam-file] [output]";
-// 			extractMrsFASTOEA(argv[2], argv[3]);
-// 		}
-// 		else if (mode == "mask" || mode == "maski") {
-// 			if (argc != 6) throw "Usage:\tCellFreeSV mask/maski [repeat-file] [reference] [output] [padding]";
-// 			mask(argv[2], argv[3], argv[4], atoi(argv[5]), mode == "maski");
-// 		}
-// 		else if (mode == "sort") {
-// 			if (argc != 4) throw "Usage:\tCellFreeSV sort [sam-file] [output]";
-// 			sortSAM(argv[2], argv[3]);
-// 		}
-// 		else if (mode == "rm_unmap") {
-// 			if (argc != 4) throw "Usage:\tCellFreeSV rm_unmap [fq-file] [output]";
-// 			removeUnmapped(argv[2], argv[3]);
-// 		}
-// 		else if (mode == "partition") {
-// 			if (argc != 6) throw "Usage:\tCellFreeSV partition [read-file] [mate-file] [output-file] [threshold]";
-// 			partify(argv[2], argv[3], argv[4], atoi(argv[5]));
-// 		}
-// 		else if (mode == "predict") {
-// 			if (argc != 14) throw "Usage:\tCellFreeSV predict [partition-file] [reference] [gtf] [range] [output-file-vcf] [output-file-full] [kmer-length] [min-support] [uncertainty] [local-assembly] [local-mode] [reference-flank]"; 
-// 			predict(argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], atoi(argv[8]), atoi(argv[9]), atoi(argv[10]), atoi(argv[11]), atoi(argv[12]), atoi(argv[13]));
-// 		}
-// 		else if (mode == "get_cluster") {
-// 			if (argc != 4) throw "Usage:\tCellFreeSV get_cluster [partition-file] [range]";
-// 			genome_partition pt;
-// 			pt.output_partition( argv[2], argv[3]);
-// 		}
-// 		else if (mode == "simulate_SVs") {
-// 			if (argc != 5) throw "Usage:\tCellFreeSV simulate_SVs [bed-or-SV-file] [ref-file] [is-bed]";
-// 			simulate_SVs(argv[2], argv[3], atoi(argv[4]));
-// 		}
-// 		else if (mode == "annotate") {
-// 			if (argc != 6) throw "Usage:\tCellFreeSV annotate [gtf-file] [bed-file] [out-file] [is-genomic]";
-// 			annotate(argv[2], argv[3], argv[4], atoi(argv[5]));
-// 		}
-// 		else {
-// 			throw "Invalid mode selected";
-// 		}
-// 	}
-// 	catch (const char *e) {
-// 		ERROR("Error: %s\n", e);
-// 		exit(1);
-// 	}
-		
-// 	return 0;
-// }
