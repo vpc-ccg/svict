@@ -6,31 +6,32 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "common.h"
 #include "parser.h"
 #include "record.h"
 
 class SAMParser: public Parser {
 	FILE *input;
 	
-	Record currentRecord;
     size_t file_size;
+
+    Record currentRecord;
 
 public:
 	SAMParser (const std::string &filename);
-	~SAMParser ();
+	~SAMParser (void);
 
 public:
 	std::string readComment (void);
-	bool readNext (void);
-	//bool readRaw(Array<uint8_t> &a);
+	bool readNext ();
 	bool hasNext (void);
 	size_t fpos (void);
 	size_t fsize (void);
 
 public:
-	void parse (void);
-	const Record &next (void);
+	void parse (Record &line);
 	std::string head (void);
+	Record next (void) ;
 };
 
 #endif

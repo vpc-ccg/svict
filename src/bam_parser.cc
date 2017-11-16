@@ -1,16 +1,18 @@
-#include <assert.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include "common.h"
 #include "record.h"
 #include "bam_parser.h"
 
-
+#include <assert.h>
+#include <fcntl.h>
+#include <unistd.h>
 using namespace std;
 
 BAMParser::BAMParser (const string &filename):
 	dataSize(0), chromosomesCount(0), data(0), chromosomes(0)
 {
+	Parser::fname = filename;
+
+
 	fd = fopen(filename.c_str(), "rb");
 	fseek(fd, 0L, SEEK_END);
 	file_size = ftell(fd);
@@ -18,29 +20,41 @@ BAMParser::BAMParser (const string &filename):
 
 	input = gzdopen(fileno(fd), "rb");
 	if (input == Z_NULL)	
-		exit(1);
+		{	exit(1);	}
 
 	char magic[5] = {0};
-	gzread(input, magic, 4);
+	if (gzread(input, magic, 4) != 4) {
+		int p;
+		ERROR("%s\n", gzerror(input, &p));
+	}
 	assert(!strcmp(magic, "BAM\x1"));
 }
 
-BAMParser::~BAMParser () {
+BAMParser::~BAMParser (void) 
+{
 	for (int i = 0; i < chromosomesCount; i++)
 		free(chromosomes[i]);
-	chromosomes--;
-	free(chromosomes);
+	if (chromosomes) {
+		chromosomes--;
+		free(chromosomes);
+	}
 	gzclose(input);
 }
 
-string BAMParser::readComment (void)  {
+string BAMParser::readComment (void)  
+{
 	int32_t len;
 	gzread(input, &len, sizeof(int32_t));
 	char *c = (char*)calloc(len + 1, 1);
 	gzread(input, c, len);
-	strncpy(currentRecord.line, c, len + 1);
+	currentRecord.line = (char*)malloc(len + 1);
+	strncpy(&currentRecord.line[0], c, len + 1);
 	string s = c;
 	free(c);
+
+	// ugly; needs smarter way
+	currentRecord.line = (char*)realloc(currentRecord.line, 8 * MB);
+	currentRecord.lineSize = 8 * MB;
 
 	readChromosomeInformation();
 	readNext();
@@ -48,7 +62,8 @@ string BAMParser::readComment (void)  {
 	return s;
 }
 
-void BAMParser::readChromosomeInformation (void) {
+void BAMParser::readChromosomeInformation (void) 
+{
 	gzread(input, &chromosomesCount, sizeof(int32_t));
 	chromosomes = (char**)malloc((chromosomesCount + 1) * sizeof(char*));
 	chromosomes[0] = (char*)"*";
@@ -62,13 +77,15 @@ void BAMParser::readChromosomeInformation (void) {
 	}
 }
 
-bool BAMParser::readNext (void) {
+bool BAMParser::readNext (void) 
+{
 	int32_t bsize, cc;
-	char *buf = currentRecord.line;
+	char *buf = &currentRecord.line[0];
+	char *line = buf;
 	if (gzread(input, &bsize, 4) != 4) 
 		return false;
 
-	assert(bsize < MAXLEN);
+	//assert(bsize < MAXLEN);
 	if (bsize > dataSize)
 		data = (char*)realloc(data, dataSize = bsize + KB);
 	gzread(input, data, bsize);
@@ -82,23 +99,23 @@ bool BAMParser::readNext (void) {
 
 	// rn
 	strncpy(buf, data + 8 * 4, l_read_name);
-	currentRecord.strFields[RN] = buf;
+	currentRecord.strFields[Record::RN] = buf - line;
 	buf += l_read_name;
 
 	// flag
- 	currentRecord.intFields[MF] = di[3] >> 16;
+ 	currentRecord.intFields[Record::MF] = di[3] >> 16;
 
  	// chr
  	string chr = chromosomes[di[0]];
 	strncpy(buf, chr.c_str(), chr.size() + 1);
-	currentRecord.strFields[CHR] = buf;
+	currentRecord.strFields[Record::CHR] = buf - line;
 	buf += chr.size() + 1;	 	
 
  	// loc
- 	currentRecord.intFields[LOC] = di[1] + 1;
+ 	currentRecord.intFields[Record::LOC] = di[1] + 1;
 
  	// mq
- 	currentRecord.intFields[MQ] = (di[2] >> 8) & 0xff;
+ 	currentRecord.intFields[Record::MQ] = (di[2] >> 8) & 0xff;
  	
  	// cigar
  	uint32_t *op = (uint32_t*)(data + 8 * 4 + l_read_name);
@@ -109,7 +126,7 @@ bool BAMParser::readNext (void) {
 		buf[cc++] = '*';
 	n_cigar_op *= 4;
 	buf[cc++] = 0;
- 	currentRecord.strFields[CIGAR] = buf;
+ 	currentRecord.strFields[Record::CIGAR] = buf - line;
 	buf += cc;
 
  	// p_chr
@@ -117,14 +134,14 @@ bool BAMParser::readNext (void) {
  	if (pe_chr != "*" && pe_chr == chr)
  		pe_chr = "=";
  	strncpy(buf, pe_chr.c_str(), pe_chr.size() + 1);
-	currentRecord.strFields[P_CHR] = buf;
+	currentRecord.strFields[Record::P_CHR] = buf - line;
 	buf += pe_chr.size() + 1;
 
 	// p_loc
- 	currentRecord.intFields[P_LOC] = di[6] + 1;
+ 	currentRecord.intFields[Record::P_LOC] = di[6] + 1;
  	
  	// tlen
- 	currentRecord.intFields[TLEN] = di[7];
+ 	currentRecord.intFields[Record::TLEN] = di[7];
 
  	// seq
  	char *sq = data + 8 * 4 + l_read_name + n_cigar_op;
@@ -134,7 +151,7 @@ bool BAMParser::readNext (void) {
  	if (l_seq == 0)
  		buf[cc++] = '*';
  	buf[cc++] = 0;
- 	currentRecord.strFields[SEQ] = buf;
+ 	currentRecord.strFields[Record::SEQ] = buf - line;
 	buf += cc;
  	
  	// qual
@@ -145,17 +162,17 @@ bool BAMParser::readNext (void) {
  	if (l_seq == 0)
  		buf[cc++] = '*';
  	buf[cc++] = 0;
- 	currentRecord.strFields[QUAL] = buf;
+ 	currentRecord.strFields[Record::QUAL] = buf - line;
 	buf += cc;
 
-	currentRecord.strFields[OPT] = buf;
+	currentRecord.strFields[Record::OPT] = buf - line;
 
  	// optional data ...
  	int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
  	if (pos >= bsize)
- 		currentRecord.strFields[OPT][0] = 0;
+ 		buf[0] = 0;
  	else 
- 		currentRecord.strFields[OPT]++; // avoid \t
+ 		currentRecord.strFields[Record::OPT]++; // avoid \t
 	while (pos < bsize) {
 		*buf = '\t', buf++;
 		char t = data[pos + 2]; 
@@ -164,11 +181,11 @@ bool BAMParser::readNext (void) {
 		switch (t) {
 			case 'A': buf += sprintf(buf, "A:%c", data[pos]); pos++; break;
 			case 'c': buf += sprintf(buf, "i:%d", *(int8_t*)(data + pos)); pos += 1; break;
-			case 'C': buf += sprintf(buf, "i:%u", *(int8_t*)(data + pos)); pos += 1; break;
-			case 's': buf += sprintf(buf, "i:%u", *(int16_t*)(data + pos)); pos += 2; break;
-			case 'S': buf += sprintf(buf, "i:%d", *(int16_t*)(data + pos)); pos += 2; break;
-			case 'i': buf += sprintf(buf, "i:%u", *(int32_t*)(data + pos)); pos += 4; break;
-			case 'I': buf += sprintf(buf, "i:%d", *(int32_t*)(data + pos)); pos += 4; break;
+			case 'C': buf += sprintf(buf, "i:%u", *(uint8_t*)(data + pos)); pos += 1; break;
+			case 's': buf += sprintf(buf, "i:%d", *(int16_t*)(data + pos)); pos += 2; break;
+			case 'S': buf += sprintf(buf, "i:%u", *(uint16_t*)(data + pos)); pos += 2; break;
+			case 'i': buf += sprintf(buf, "i:%d", *(int32_t*)(data + pos)); pos += 4; break;
+			case 'I': buf += sprintf(buf, "i:%u", *(uint32_t*)(data + pos)); pos += 4; break;
 			case 'f': buf += sprintf(buf, "f:%g", *(float*)(data + pos)); pos += 4; break;
 			case 'd': buf += sprintf(buf, "d:%lg", *(double*)(data + pos)); pos += 8; break;
 			case 'Z': 
@@ -201,27 +218,34 @@ bool BAMParser::readNext (void) {
 		}
 	}
 	*buf = 0;
+	currentRecord.lineSize = buf - currentRecord.line;
+	currentRecord.lineLength = buf - currentRecord.line;
 
 	return true;
 }
 
-bool BAMParser::hasNext (void) {
+bool BAMParser::hasNext (void) 
+{
 	return !gzeof(input);
 }
 
-size_t BAMParser::fpos (void) {
+size_t BAMParser::fpos (void) 
+{
 	return lseek(fileno(fd), 0L, SEEK_CUR);
 }
 
-size_t BAMParser::fsize (void) {
+size_t BAMParser::fsize (void) 
+{
 	return file_size;
 }
 
-const Record &BAMParser::next (void) {
+ Record BAMParser::next (void) 
+{
 	return currentRecord;
 }
 
-string BAMParser::head (void) {
+string BAMParser::head (void) 
+{
 	return currentRecord.getChromosome();
 }
 

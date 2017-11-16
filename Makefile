@@ -1,4 +1,4 @@
-EXECUTABLE=CellFreeSV
+EXECUTABLE=SVICT
 
 all:
 	$(MAKE) -C src all
