@@ -437,13 +437,14 @@ void printHELP()
 	LOG( "\t-x|--unmapped:\tUnmapped reads file for generating paritions.");
 	LOG( "\t\nOptional Parameters:");
 	LOG( "\t-b|--barcode:\tInput reads contain barcodes.");
+	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
 	LOG( "\t-c|--cluster:\tClustering threshold (default 1000).");
 	LOG( "\t-k|--kmer:\tKmer length (default 14).");
 	LOG( "\t-a|--anchor:\tAnchor length (default 40).");
 	LOG( "\t-s|--min_support:\tMin Read Support (default 2).");
 	LOG( "\t-S|--max_support:\tMax Read Support (default unlimited).");
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
-	LOG( "\t-m|--min_support:\tMin SV length (default 40).");
+	LOG( "\t-m|--min_support:\tMin SV length (default 60).");
 	LOG( "\t-M|--max_support:\tMax SV length (default 20000).");
 	LOG( "\t\nExample Command:");
 	LOG( "\t./SVICT -i input.sam -o tmp");
@@ -504,10 +505,10 @@ int main(int argc, char *argv[])
 				return 0;
 			case 'b':
 				barcodes = true; 
-				return 0;
+				break;
 			case 'p':
 				print_reads = true; 
-				return 0;
+				break;
 			case 'i':
 				input_sam.assign( optarg );
 				sam_flag = 1;
