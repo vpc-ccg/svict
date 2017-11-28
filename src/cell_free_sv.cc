@@ -493,7 +493,7 @@ int main(int argc, char *argv[])
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:b:p:c:k:a:s:S:u:m:M:x:", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpc:k:a:s:S:u:m:M:x:", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
