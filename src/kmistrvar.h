@@ -34,6 +34,10 @@ private:
 	const bool PRINT_READS = false;
 	const bool PRINT_STATS = false;
 	const bool USE_BARCODES = false;
+	const vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
+	const vector<string> contexts = {"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
+	const vector<string> sv_types = {"INV", "INS", "DEL", "DUP", "TRANS", "BND"};
+	const short INV = 0; const short INS = 1; const short DEL = 2; const short DUP = 3; const short TRANS = 4; const short BND = 5; const short INSL = 6; const short INSR = 7; 
 
 	struct mapping{
 		long loc;// : 29; 
@@ -72,13 +76,25 @@ private:
 		unsigned short repeat;	//8
 	};
 
+	struct result{
+
+		string ref_seq;
+		string alt_seq;
+		string info;
+		long end;
+		long clust;
+		int con;
+		unsigned short sup;
+		long pair_loc;
+		char pair_chr;
+	};
+
 	vector<contig> all_contigs; // 10% of memory
 	vector<compressed_contig> all_compressed_contigs; 
-	vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
-	vector<string> contexts ={"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
 	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
 	vector<last_interval>** last_intervals;
+	tsl::sparse_map<long, vector<result>>** results;
 	vector<pair<int,char>> cluster_info;
 	vector<vector<int>> contig_kmers;
 	vector<int> contig_kmer_counts;
@@ -105,6 +121,8 @@ private:
 	compressed_contig compress(contig& con);
 	pair<unsigned short,pair<unsigned short,unsigned short>> compute_support(int& id, int start, int end);
 	vector<pair<pair<string, string>, int>> correct_reads(vector<pair<pair<string, string>, int>> reads);
+	long add_result(int id, mapping_ext& m1, mapping_ext& m2, short type, char pair_chr, long pair_loc);
+	void print_results(FILE* fo_vcf, FILE* fr_vcf);
 	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id, mapping_ext m1, mapping_ext m2, string type);
 	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1, int id2, mapping_ext m1, mapping_ext m2, mapping_ext m3, mapping_ext m4, string type);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
