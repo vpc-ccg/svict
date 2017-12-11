@@ -11,7 +11,6 @@ using namespace std;
 
 const int MAX_LINE_ANNO = 200000;
 const int TOKEN_LENGTH_ANNO = 20000;
-const bool NEW_GTF = true;
 
 typedef struct
 {
@@ -74,7 +73,7 @@ void adjust_gene( map<string, gene_data> &map_gene, const string g_id, char *gen
 void ensembl_Reader(const char *gtf_file, map<string, vector<isoform> > &iso_gene_map, map<string, vector<gene_data> > &gene_sorted_map);
 void bed_reader( char *bed_file, map< string, vector<Region> > &interval_map);
 void locate_in_isoform( uint32_t s, uint32_t e, const isoform &iso, vector<uint32_t> &t_vec, bool genomic);
-int  locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map, string &best_gene, string &best_trans , vector<uint32_t> &vec_best);
-int  locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map, string &best_gene, string &best_trans , vector<uint32_t> &vec_best, map <string, vector<uint32_t>> &vec_all);
-int  locate_interval( const string &ref, uint32_t s, uint32_t e, const string &gene_id, const string &trans_id, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map, string &best_gene, string &best_trans , vector<uint32_t> &vec_best, map <string, vector<uint32_t>> &vec_all);
+int  locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map, string &best_gene, string &best_name, string &best_trans , vector<uint32_t> &vec_best);
+int  locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map, string &best_gene, string &best_name, string &best_trans , vector<uint32_t> &vec_best, map <string, vector<uint32_t>> &vec_all);
+int  locate_interval( const string &ref, uint32_t s, uint32_t e, const string &gene_id, const string &trans_id, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map, string &best_gene, string &best_name, string &best_trans , vector<uint32_t> &vec_best, map <string, vector<uint32_t>> &vec_all);
 #endif

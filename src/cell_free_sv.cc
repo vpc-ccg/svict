@@ -75,11 +75,11 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 }
 
 /********************************************************************/
-void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const string &range, const string &out_vcf, const string &out_full, 
+void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const string &range, const string &out_vcf,
 					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
 {
 	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads);
-	predictor.run_kmistrvar(range, out_vcf, out_full, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, ref_flank);
+	predictor.run_kmistrvar(range, out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, ref_flank);
 }
 
 /********************************************************************/
@@ -354,7 +354,7 @@ void simulate_SVs (string in_file, string ref_file, bool from_bed) {
 /********************************************************************/
 void annotate (string gtf, string in_file, string out_file, bool genomic) {
 
-	string line, chr, best_gene_s, best_trans_s, best_gene_e, best_trans_e, context_s, context_e, key, gene_id, trans_id;
+	string line, chr, best_gene_s, best_name_s, best_trans_s, best_gene_e, best_name_e, best_trans_e, context_s, context_e, key, gene_id, trans_id;
 	int start, end, t_start, t_end;
 	ifstream infile (in_file);
 	ofstream outfile (out_file);
@@ -375,15 +375,15 @@ void annotate (string gtf, string in_file, string out_file, bool genomic) {
 			end = atoi(tokens[2].c_str());
 
 			if(genomic){
-				locate_interval(chr, start, start, gene_sorted_map[chr], 0, iso_gene_map, best_gene_s, best_trans_s, vec_best_s, vec_all_s);
-				locate_interval(chr, end, end, gene_sorted_map[chr], 0, iso_gene_map, best_gene_e, best_trans_e, vec_best_e, vec_all_e);
+				locate_interval(chr, start, start, gene_sorted_map[chr], 0, iso_gene_map, best_gene_s, best_name_s, best_trans_s, vec_best_s, vec_all_s);
+				locate_interval(chr, end, end, gene_sorted_map[chr], 0, iso_gene_map, best_gene_e,  best_name_e, best_trans_e, vec_best_e, vec_all_e);
 			}
 			else{
 				gene_id = tokens[3];
 				trans_id = tokens[4];
 
-				locate_interval(chr, start, start, gene_id, trans_id, gene_sorted_map[chr], 0, iso_gene_map, best_gene_s, best_trans_s, vec_best_s, vec_all_s);
-				locate_interval(chr, end, end, gene_id, trans_id, gene_sorted_map[chr], 0, iso_gene_map, best_gene_e, best_trans_e, vec_best_e, vec_all_e);
+				locate_interval(chr, start, start, gene_id, trans_id, gene_sorted_map[chr], 0, iso_gene_map, best_gene_s, best_name_s, best_trans_s, vec_best_s, vec_all_s);
+				locate_interval(chr, end, end, gene_id, trans_id, gene_sorted_map[chr], 0, iso_gene_map, best_gene_e, best_name_e, best_trans_e, vec_best_e, vec_all_e);
 			}
 			
 			for (auto & match : vec_all_s){
@@ -616,7 +616,7 @@ int main(int argc, char *argv[])
 	}	
 	else
 	{
-		predict(input_sam, reference, annotation, barcodes, print_reads, "0-999999999", (out_prefix + ".vcf"), (out_prefix + ".out"), k, a, s, S, u, m, M, 0, 0);
+		predict(input_sam, reference, annotation, barcodes, print_reads, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, 0);
 	}
 	return 0;
 }

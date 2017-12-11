@@ -32,7 +32,7 @@ private:
 	const int ANCHOR_SIZE = 40;
 	const bool USE_ANNO = true;
 	const bool PRINT_READS = false;
-	const bool PRINT_STATS = false;
+	const bool PRINT_STATS = true;
 	const bool USE_BARCODES = false;
 	const vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
 	const vector<string> contexts = {"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
@@ -81,9 +81,11 @@ private:
 		string ref_seq;
 		string alt_seq;
 		string info;
+		bool one_bp;
 		long end;
 		long clust;
 		int con;
+		int u_id;
 		unsigned short sup;
 		long pair_loc;
 		char pair_chr;
@@ -107,6 +109,7 @@ private:
 	unsigned long long num_kmer;
 	int k;
 	int num_intervals;
+	int u_ids;
 
 public:
 
@@ -122,14 +125,12 @@ private:
 	pair<unsigned short,pair<unsigned short,unsigned short>> compute_support(int& id, int start, int end);
 	vector<pair<pair<string, string>, int>> correct_reads(vector<pair<pair<string, string>, int>> reads);
 	long add_result(int id, mapping_ext& m1, mapping_ext& m2, short type, char pair_chr, long pair_loc);
-	void print_results(FILE* fo_vcf, FILE* fr_vcf);
-	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id, mapping_ext m1, mapping_ext m2, string type);
-	void print_variant(FILE* fo_vcf, FILE* fr_vcf, FILE* fo_full, int id1, int id2, mapping_ext m1, mapping_ext m2, mapping_ext m3, mapping_ext m4, string type);
+	void print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
 	void assemble(const string &range, int min_support, int max_support, const bool LOCAL_MODE, int ref_flank);
-	void generate_intervals(const bool LOCAL_MODE);
-	void predict_variants(const string &out_vcf, const string &out_full, int uncertainty, int min_length, int max_length);
+	void generate_intervals(const string &out_vcf, const bool LOCAL_MODE);
+	void predict_variants(const string &out_vcf, int uncertainty, int min_length, int max_length);
 	bool bfs(const int DEPTH, int** rGraph, int s, int t, int parent[]);
 	vector<vector<int>> fordFulkerson(const int DEPTH, int** rGraph, int s, int t);
 	
@@ -137,6 +138,6 @@ public:
 	
 	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads);
 	~kmistrvar();
-	void run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank);
+	void run_kmistrvar(const string &range, const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank);
 };
 #endif

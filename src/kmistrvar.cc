@@ -22,6 +22,7 @@ kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &partition
 	num_kmer = (unsigned long long)pow(4,k);
 	kmer_mask = (unsigned long long)(num_kmer-1);
 	num_intervals = 1;
+	u_ids = 0;
 	contig_kmers_index = new int[num_kmer]; 
 	if(USE_ANNO) ensembl_Reader(gtf.c_str(), iso_gene_map, gene_sorted_map );
 
@@ -289,6 +290,8 @@ long kmistrvar::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type,
 	char strand = '+';
 	result new_result;
 	new_result.info = "";
+	new_result.one_bp = false;
+	new_result.u_id = u_ids++;
 
 	//TO think about:
 	//end location for 2 contig
@@ -299,17 +302,22 @@ long kmistrvar::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type,
 	if(type == INS){
 		new_result.ref_seq = con_string(id, m1.con_loc+k-1, 1);
 		new_result.alt_seq = con_string(id, m1.con_loc+k-1, contig_dist+1);
+		if(new_result.alt_seq == "")new_result.alt_seq = "<INS>"; //two contig cases where contigdist <= uncertainty
 	}
 	else if(type == INSL){
 		type = INS;
 		new_result.ref_seq = "N";
 		new_result.alt_seq = con_string(id, 0, (m1.con_loc+k-m1.len));
+		new_result.info = ":L";
+		new_result.one_bp = true;
 		loc = end;
 	}
 	else if(type == INSR){
 		type = INS;
 		new_result.ref_seq = con_string(id, m1.con_loc+k-1, 1);
 		new_result.alt_seq = con_string(id, m1.con_loc+k-1, (contig_len-(m1.con_loc+k-1)+1));
+		new_result.info = ":R";
+		new_result.one_bp = true;
 		end = loc;
 	}
 	else if(type == DEL){
@@ -318,13 +326,13 @@ long kmistrvar::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type,
 	}
 	else if(type == DUP){
 
-		new_result.info = "Interspersed";
+		new_result.info = ":INTERSPERSED";
 		new_result.ref_seq = "N";
 		new_result.alt_seq = "<DUP>";
 
 		if(strand == '+'){
 			if(m1.loc < m2.loc && (m1.loc + m1.len)-m2.loc > MIN_SV_LEN_DEFAULT){
-				new_result.info = "Tandem";
+				new_result.info = ":TANDEM";
 				loc = m2.loc;
 				end = (m1.loc + m1.len);
 				int len = ((m1.loc + m1.len)-m2.loc)+1;
@@ -338,31 +346,33 @@ long kmistrvar::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type,
 				}
 			}
 			else if(m1.loc > m2.loc && (m1.loc + m1.len) > (m2.loc + m2.len)){
-				new_result.info = "Tandem";
+				new_result.info = ":TANDEM";
 				new_result.ref_seq = con_string(id,m1.con_loc+k-1, 1);
-				
+				new_result.one_bp = true;
 			}
 			else{
-				new_result.info = "Interspersed"; //TODO we have the alt sequence
+				new_result.info = ":INTERSPERSED"; //TODO we have the alt sequence
 				new_result.ref_seq = con_string(id,m1.con_loc+k-1, 1);
+				new_result.one_bp = true;
 			}
 		}
 		else{
-			new_result.info = "Negative";
+			new_result.info = ""; //negative
 		}
 	}
 	else if(type == INV){
 
 		new_result.ref_seq = con_string(id,m1.con_loc+k-1, 1);
 		new_result.alt_seq = "<INV>";
-		new_result.info = "OneBP";
+		new_result.info = ":LONG";
+		new_result.one_bp = true;
 
 		if(m1.rc){
 			new_result.ref_seq = "N";
 		}
 		else if(!m2.rc){
 			new_result.alt_seq = con_string(id,m1.con_loc+k-1, contig_dist+1);
-			new_result.info = "Micro";
+			new_result.info = ":MICRO";
 		}
 	}
 	else if(type == TRANS){
@@ -371,24 +381,48 @@ long kmistrvar::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type,
 		bool is_anchor2 = ((m2.chr == contig_chr) && (abs(m2.loc - contig_loc) < MAX_ASSEMBLY_RANGE));
 
 		if(!is_anchor1){
-			new_result.ref_seq = "N";
+			new_result.ref_seq = con_string(id,m2.con_loc+k-1-m2.len, 1);;
 			new_result.alt_seq = "<TRANS>";
+			new_result.info = "right_bp";
+			new_result.one_bp = true;
 		}
 		else if(!is_anchor2){
 			new_result.ref_seq = con_string(id,m1.con_loc+k-1, 1);
 			new_result.alt_seq = "<TRANS>";
+			new_result.info = "left_bp";
+			new_result.one_bp = true;
 		}
 		else{
+			new_result.info = "small";
 			new_result.ref_seq = con_string(id,m1.con_loc+k-1, 1);
 			new_result.alt_seq = con_string(id,m1.con_loc+k-1, contig_dist+1);
 		}
 	}
 
 	if(loc > end){
-		if(type == INV || type == DEL){
+		if(type == INV || type == DEL || type == DUP){
 			long tmp = loc;
 			loc = end;
 			end = tmp;
+		}
+	}
+
+	//quick and dirty fix
+	if(type == INS){
+
+		int g_count = 0;
+
+		for(int i = 0; i < new_result.alt_seq.length(); i++){
+			if(new_result.alt_seq[i] == 'G'){
+				g_count++;
+			}
+			else{
+				g_count = 0; 
+			}
+
+			if(g_count > ANCHOR_SIZE){
+				return 0;
+			}
 		}
 	}
 
@@ -407,15 +441,17 @@ long kmistrvar::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type,
 	return loc;
 }
 
-void kmistrvar::print_results(FILE* fo_vcf, FILE* fr_vcf){
+void kmistrvar::print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 
-	int loc;
-	string best_gene1 = "", best_trans1 = "", context1 = "";
-	string best_gene2 = "", best_trans2 = "", context2 = "";
-	string best_gene3 = "", best_trans3 = "", context3 = "";
-	string type;
+	long loc, start, end;
+	string best_gene1 = "", best_name1 = "", best_trans1 = "", context1 = "";
+	string best_gene2 = "", best_name2 = "", best_trans2 = "", context2 = "";
+	string best_gene3 = "", best_name3 = "", best_trans3 = "", context3 = "";
+	string type, info;
 	string cluster_ids, cluster_ids_pair;
 	string contig_ids, contig_ids_pair;
+	string filter = "PASS";
+	string anno = "";
 	vector<uint32_t> vec_best1, vec_best2, vec_best3;
 	result c, cp; //consensus
 
@@ -430,6 +466,7 @@ int not_bnd_count = 0;
 				loc = result_pair.first;
 				unordered_set<long> clusters;
 				unordered_set<int> contigs;
+				filter = "PASS";
 				c.sup = 0;
 				c.end = 0;
 
@@ -452,8 +489,10 @@ int not_bnd_count = 0;
 						contigs.insert(r.con);
 						c.sup += r.sup;
 
-						c.pair_loc = r.pair_loc;
-						c.pair_chr = r.pair_chr;					
+						if(r.pair_loc != 0){
+							c.pair_loc = r.pair_loc;
+							c.pair_chr = r.pair_chr;
+						}					
 					}
 
 					if(PRINT_READS){
@@ -474,33 +513,80 @@ int not_bnd_count = 0;
 					continue;
 				}
 
-				for(auto& clust : clusters) {
-					cluster_ids = cluster_ids + (to_string(clust) + ",");
-				}  
+				if(PRINT_READS){
+					for(auto& clust : clusters) {
+						cluster_ids = cluster_ids + (to_string(clust) + ",");
+					}  
 
-				for(auto& con : contigs) {
-					contig_ids = contig_ids + (to_string(con) + ",");
-				}   
+					for(auto& con : contigs) {
+						contig_ids = contig_ids + (to_string(con) + ",");
+					}   
 
-				cluster_ids.resize(cluster_ids.length()-1);
-				contig_ids.resize(contig_ids.length()-1);
+					cluster_ids.resize(cluster_ids.length()-1);
+					contig_ids.resize(contig_ids.length()-1);
+				}
+				else{
+					cluster_ids = to_string(clusters.size());
+					contig_ids = to_string(contigs.size());
+				}
+
 
 				if(c.pair_loc == 0 || c.pair_loc == loc || (c.pair_loc > 0 && (results[sv][c.pair_chr].find(c.pair_loc) == results[sv][c.pair_chr].end()))){ //TODO deal with this last case
 
+					if(c.one_bp)filter = "TWO_BP"; //Counter-intuitive I think, but rules are rules
+
 					if(USE_ANNO){
-						locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
+						locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
 						context1 = contexts[vec_best1[0]];
-						locate_interval(chromos[c.pair_chr], c.end, c.end, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
+						locate_interval(chromos[c.pair_chr], c.end, c.end, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
 						context2 = contexts[vec_best2[0]];
-						locate_interval(chromos[chr], loc, c.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_trans3, vec_best3);
+						locate_interval(chromos[chr], loc, c.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_name3, best_trans3, vec_best3);
 						context3 = contexts[vec_best3[0]];
 
-						if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + "-FUSION";
+
+						anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1  + ";ANNOC=" + context3 + "," + best_gene3 + "," + best_trans3 + "," + best_name3 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
+
+						if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
+						
 					}
 
-					fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t0\tPASS\tSVTYPE=%s;END=%d;Cluster=%s;Contig=%s;Support=%d;Info=%s;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s;ContextC=%s;GeneC=%s;TransC=%s;Source=%s,%d,%d,+\n", 
-						chromos[chr].c_str(), loc, c.ref_seq.c_str(), c.alt_seq.c_str(), type.c_str(), c.end, cluster_ids.c_str(), contig_ids.c_str(), c.sup, 
-						c.info.c_str(), context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), context3.c_str(), best_gene3.c_str(), best_trans3.c_str(), chromos[c.pair_chr].c_str(), c.end, c.end);
+
+					if(sv == TRANS){
+
+						if(c.info == "left_bp"){
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\tN\t.N\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), (loc+1), c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+						}
+						else if(c.info == "right_bp"){
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\tN\tN.\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), loc, c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+						}
+						else{
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), (c.end + c.alt_seq.length()), c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+						}
+					}
+					else{
+
+						start = loc;
+						end = c.end;
+
+						// If it's more than uncertainty it's better to print it so we know something is wrong
+						if(abs(c.end-loc) <= uncertainty){
+							start = min(loc, c.end);
+							end = max(loc, c.end);
+						}
+
+						fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\t%s\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+							chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), filter.c_str(), type.c_str(), c.info.c_str(), end, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str());
+					}
+					
 
 				}
 				else if(c.pair_loc > 0){
@@ -541,16 +627,22 @@ int not_bnd_count = 0;
 						continue;
 					}
 
-					for(auto& clust : clusters) {
-						cluster_ids_pair = cluster_ids_pair + to_string(clust) + ",";
-					}  
+					if(PRINT_READS){
+						for(auto& clust : clusters) {
+							cluster_ids_pair = cluster_ids_pair + to_string(clust) + ",";
+						}  
 
-					for(auto& con : contigs) {
-						contig_ids_pair = contig_ids_pair + to_string(con) + ",";
-					}   
+						for(auto& con : contigs) {
+							contig_ids_pair = contig_ids_pair + to_string(con) + ",";
+						}   
 
-					cluster_ids_pair.resize(cluster_ids_pair.length()-1);
-					contig_ids_pair.resize(contig_ids_pair.length()-1);
+						cluster_ids_pair.resize(cluster_ids_pair.length()-1);
+						contig_ids_pair.resize(contig_ids_pair.length()-1);
+					}
+					else{
+						cluster_ids_pair = to_string(clusters.size());
+						contig_ids_pair = to_string(contigs.size());
+					}
 
 					// int loc1 == m1.loc + m1.len  == loc
 					// int loc2 == m2.loc			== c.end
@@ -560,37 +652,83 @@ int not_bnd_count = 0;
 					if(sv == TRANS){
 bnd_count++;
 						if(USE_ANNO){
-							locate_interval(chromos[chr], loc, cp.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
+							locate_interval(chromos[chr], loc, cp.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
 							context1 = contexts[vec_best1[0]];
-							locate_interval(chromos[c.pair_chr], c.end, c.pair_loc, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
+							locate_interval(chromos[c.pair_chr], c.end, c.pair_loc, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
 							context2 = contexts[vec_best2[0]];
 
-							if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + "-FUSION";
+							anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
+
+							if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
+
 						}
 
-						fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t%s[%s:%d[\t0\tPASS\tSVTYPE=BND;MATEID=bnd_%d;Cluster=%s;Contig=%s;Support=%d;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s\n", 
-							chromos[chr].c_str(), loc, c.con, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, cp.con, cluster_ids.c_str(), contig_ids.c_str(), c.sup,
-							context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str()); 
-						fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t]%s:%d]%s\t0\tPASS\tSVTYPE=BND;MATEID=bnd_%d;Cluster=%s;Contig=%s;Support=%d;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s\n", 
-							chromos[chr].c_str(), cp.end, cp.con, cp.ref_seq.c_str(), chromos[cp.pair_chr].c_str(), c.pair_loc, cp.ref_seq.c_str(), c.con, cluster_ids_pair.c_str(), contig_ids_pair.c_str(), cp.sup,
-							context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str()); 
+						if(abs(cp.end-loc) <= uncertainty){
+							info = ":INS";
+							if(abs(c.end-c.pair_loc) <= uncertainty)continue; //1 FP
+						}
+						else{
+							if(abs(c.end-c.pair_loc) <= uncertainty){
+								info = ":DEL";
+							}
+							else{
+								info = ":SWAP";
+							}
+						}
+
+						fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t%s[%s:%d[\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+							chromos[chr].c_str(), loc, c.con, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, info.c_str(), cp.con, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+
+						if(USE_ANNO)anno = "ANNOL=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2 + ";ANNOR=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1; 
+
+						fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t]%s:%d]%s\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+							chromos[chr].c_str(), cp.end, cp.con, cp.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.pair_loc, cp.ref_seq.c_str(), info.c_str(), c.con, cluster_ids_pair.c_str(), contig_ids_pair.c_str(), cp.sup, anno.c_str()); 
 					}
 					else{
 not_bnd_count++;
 						if(USE_ANNO){
-							locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_trans1, vec_best1);
+							locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
 							context1 = contexts[vec_best1[0]];
-							locate_interval(chromos[c.pair_chr], c.pair_loc, c.pair_loc, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_trans2, vec_best2);
+							locate_interval(chromos[c.pair_chr], c.pair_loc, c.pair_loc, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
 							context2 = contexts[vec_best2[0]];
-							locate_interval(chromos[chr], loc, c.pair_loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_trans3, vec_best3);
+							locate_interval(chromos[chr], loc, c.pair_loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_name3, best_trans3, vec_best3);
 							context3 = contexts[vec_best3[0]];
 
-							if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + "-FUSION";
+							anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1  + ";ANNOC=" + context3 + "," + best_gene3 + "," + best_trans3 + "," + best_name3 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
+							
+							if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
+
+							
 						}
 
-						fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t0\tPASS\tSVTYPE=%s;END=%d;Cluster1=%s;Contig1=%s;Support1=%d;Cluster2=%s;Contig2=%s;Support2=%d;ContextL=%s;GeneL=%s;TransL=%s;ContextR=%s;GeneR=%s;TransR=%s;ContextC=%s;GeneC=%s;TransC=%s\n", 
-							chromos[chr].c_str(), loc, c.ref_seq.c_str(), c.alt_seq.c_str(), type.c_str(), c.pair_loc, cluster_ids.c_str(), contig_ids.c_str(), c.sup, cluster_ids_pair.c_str(), contig_ids_pair.c_str(), cp.sup,
-							 context1.c_str(), best_gene1.c_str(), best_trans1.c_str(), context2.c_str(), best_gene2.c_str(), best_trans2.c_str(), context3.c_str(), best_gene3.c_str(), best_trans3.c_str());
+						if(PRINT_READS){
+							cluster_ids += cluster_ids_pair;
+							contig_ids += contig_ids_pair;
+						}
+						else{
+							cluster_ids = to_string(stoi(cluster_ids) + stoi(cluster_ids_pair));
+							contig_ids = to_string(stoi(contig_ids) + stoi(contig_ids_pair));
+						}
+
+						if(sv == INV){
+							start = loc;
+							end = cp.end;
+						}
+						else{
+							start = loc;
+							end = c.pair_loc;
+
+							// If it's more than uncertainty it's better to print it so we know something is wrong
+							if(abs(cp.end-loc) <= uncertainty){
+								start = min(loc, c.pair_loc);
+								end = max(loc, c.pair_loc);
+							}
+						}
+
+						
+						fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\tPASS\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+							chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), type.c_str(), c.info.c_str(),  end, cluster_ids.c_str(), contig_ids.c_str(), (c.sup+cp.sup), anno.c_str());
+						
 					}
 				}
 			}
@@ -607,7 +745,7 @@ cerr << "not_bnd_count " << not_bnd_count << endl;
 //======================================================
 
 
-void kmistrvar::run_kmistrvar(const string &range, const string &out_vcf, const string &out_full, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
+void kmistrvar::run_kmistrvar(const string &range, const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
 {
 
 
@@ -625,7 +763,7 @@ cerr << endl;
 begin = clock();
 }
 
-	generate_intervals(LOCAL_MODE);
+	generate_intervals(out_vcf, LOCAL_MODE);
 
 if(PRINT_STATS){
 end = clock();
@@ -634,7 +772,7 @@ cerr << "MAPPING TIME: " << elapsed_secs << endl;
 cerr << endl;
 begin = clock();
 }
-	predict_variants(out_vcf, out_full, uncertainty, min_length, max_length);
+	predict_variants(out_vcf, uncertainty, min_length, max_length);
 
 if(PRINT_STATS){
 end = clock();
@@ -837,15 +975,16 @@ if(PRINT_STATS){
 // Interval Mapping Stage
 //======================================================
 
-void kmistrvar::generate_intervals(const bool LOCAL_MODE)
+void kmistrvar::generate_intervals(const string &out_vcf, const bool LOCAL_MODE)
 {
 
 	//Read reference and map contig kmers
 	//=====================================
 	cerr << "Generating intervals..." << endl;
 
+	char chromo = -1;
+	char last_chromo = chromo;
 	int use_rc = 2; //1 no, 2 yes
-	//int chromo = 0;
 	int jj = 0;
 	int id = 1;  //zero reserved for sink
 	unsigned long long index = 0;
@@ -862,6 +1001,11 @@ void kmistrvar::generate_intervals(const bool LOCAL_MODE)
 	int num_contigs = PRINT_READS ? all_contigs.size() : all_compressed_contigs.size();
 	int gen_start, gen_end, interval_len, contig_len, contig_lenk1;
 	bool con_repeat;
+	vector<pair<int,int>> starts;
+	string gen;
+	FILE *fo_vcf = fopen(out_vcf.c_str(), "wb");
+
+	fprintf(fo_vcf, "##fileformat=VCFv4.2\n##source=SVICT-v1.0\n");
 
 //STATS
 int anchor_intervals = 0;
@@ -880,10 +1024,7 @@ long kmer_hits = 0;
 long kmer_hits_con = 0;
 double interval_count = 0;
 
-	vector<pair<int,int>> starts;
-	string gen;
-	char chromo = -1;
-	char last_chromo = chromo;
+
 
 
 	// Initialization 
@@ -922,6 +1063,8 @@ double interval_count = 0;
 		gen = ref.extract(chromos[chromo], region.second.first, region.second.second); //get region sequence
 		gen_start = max(0,region.second.first-1);
 		gen_end = gen.length()-k+1;
+
+		fprintf(fo_vcf, "##contig=<ID=%s,length=%d>\n", chromos[chromo].c_str(), gen.length());
 
 		js = LOCAL_MODE ? jj : 0;
 		je = LOCAL_MODE ? (jj+1) : num_contigs;
@@ -1288,6 +1431,8 @@ if(PRINT_STATS){
 		delete[] valid_mappings[i];
 	}
 	delete[] valid_mappings;
+
+	fclose(fo_vcf);
 }
 
 
@@ -1295,7 +1440,7 @@ if(PRINT_STATS){
 // Predict Structural Variants Stage
 //======================================================
 
-void kmistrvar::predict_variants(const string &out_vcf, const string &out_full, int uncertainty, int min_length, int max_length)
+void kmistrvar::predict_variants(const string &out_vcf, int uncertainty, int min_length, int max_length)
 {
 	//Predict structural variants
 	//=====================================
@@ -1310,7 +1455,7 @@ int path_count = 0;
 int intc1 = 0, intc2 = 0, intc3 = 0, intc4 = 0, intc5 = 0, intc6 = 0;
 int anchor_fails = 0, ugly_fails = 0;
 int short_dup1 = 0, short_dup2 = 0, short_dup3 = 0, short_del = 0, short_inv1 = 0, short_inv2 = 0, short_ins1 = 0, short_ins2 = 0, short_trans = 0, mystery1 = 0, mystery2 = 0, mystery3 = 0;
-int long_del = 0, long_inv1 = 0, long_inv2 = 0, long_ins = 0, long_trans = 0, long_dup = 0;
+int long_del = 0, long_inv1 = 0, long_inv2 = 0, long_inv3 = 0, long_ins = 0, long_trans = 0, long_dup = 0;
 int one_bp_del = 0, one_bp_dup = 0, one_bp_inv = 0, one_bp_ins = 0, one_bp_trans = 0;
 
 
@@ -1354,9 +1499,27 @@ if(PRINT_STATS){
 	vector<mapping_ext> all_intervals;												// Bulk data of unused intervals
 	vector<interval_pair> interval_pairs; 											// Pairs of intervals
 
-	FILE *fo_vcf = fopen(out_vcf.c_str(), "wb");
+	FILE *fo_vcf = fopen(out_vcf.c_str(), "ab");
 	FILE *fr_vcf = fopen((out_vcf + ".reads").c_str(), "wb");
-	FILE *fo_full = fopen(out_full.c_str(), "wb");
+
+	fprintf(fo_vcf, "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">\n");
+	fprintf(fo_vcf, "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">\n");
+	if(PRINT_READS){
+		fprintf(fo_vcf, "##INFO=<ID=CLUSTER,Number=.,Type=Integer,Description=\"Cluster IDs supporting this SV\">\n");
+		fprintf(fo_vcf, "##INFO=<ID=CONTIG,Number=.,Type=Integer,Description=\"Contigs IDs supporting this SV\">\n");
+	}
+	else{
+		fprintf(fo_vcf, "##INFO=<ID=CLUSTER,Number=1,Type=Integer,Description=\"Number of clusters supporting this SV\">\n");
+		fprintf(fo_vcf, "##INFO=<ID=CONTIG,Number=1,Type=Integer,Description=\"Number of contigs supporting this SV\">\n");
+	}
+	fprintf(fo_vcf, "##INFO=<ID=SUPPORT,Number=1,Type=Integer,Description=\"Maximum basepair read support at or nearby the breakpoint\">\n");
+	if(USE_ANNO){
+		fprintf(fo_vcf, "##INFO=<ID=ANNOL,Number=4,Type=String,Description=\"Annotation information for region left of the BP: genomic context, gene ID, transcript ID, gene name\">\n");
+		fprintf(fo_vcf, "##INFO=<ID=ANNOC,Number=4,Type=String,Description=\"Annotation information for inserted region (if applicable): genomic context, gene ID, transcript ID, gene name\">\n");
+		fprintf(fo_vcf, "##INFO=<ID=ANNOR,Number=4,Type=String,Description=\"Annotation information for region right of the BP: genomic context, gene ID, transcript ID, gene name\">\n");
+	}
+	fprintf(fo_vcf, "##FILTER=<ID=TWO_BP,Description=\"Support for both breakpoints\">\n");
+	fprintf(fo_vcf, "#CHROM  POS ID  REF ALT QUAL  FILTER  INFO\n");
 
 	// Traverse each contig
 	for(int j = 0; j < num_contigs; j++){
@@ -1867,8 +2030,6 @@ if(j == CON_NUM_DEBUG){
 	}//j
 
 
-
-
 	
 	// Long Structural Variants
 	//============================================
@@ -1892,7 +2053,7 @@ if(j == CON_NUM_DEBUG){
 				mapping_ext iw = all_intervals[w_id];
 				mapping_ext ix, iy, iz;
 
-				while(z < sorted_intervals[chr].size() && (all_intervals[sorted_intervals[chr][z].id].loc - iw.loc) < max_length){
+				while(z < sorted_intervals[chr].size() && abs(all_intervals[sorted_intervals[chr][z].id].loc - iw.loc) < max_length){
 
 					z_id = sorted_intervals[chr][z].id;
 
@@ -1921,11 +2082,12 @@ if(j == CON_NUM_DEBUG){
 									}
 									else if(ip1.id2 != -1 && ip2.id1 != -1){
 
+
 										ix = all_intervals[ip1.id2];
 										iy = all_intervals[ip2.id1];
 										contig_dist1 = abs(iw.con_loc - (ix.con_loc-ix.len));
-										contig_dist2 = abs(iy.con_loc - (iz.con_loc-iz.len));
-
+										contig_dist2 = abs(iy.con_loc - (iz.con_loc-iz.len));			
+									
 										// Opposite sides are on the same chromosome 
 										if(ix.chr == iy.chr && contig_dist1 <= uncertainty && contig_dist2 <= uncertainty){
 
@@ -1933,11 +2095,18 @@ if(j == CON_NUM_DEBUG){
 											if(iw.rc != ix.rc && iy.rc != iz.rc){ //if(ix.rc || iy.rc){
 
 												if(ix.rc && iy.rc){
+
 													if(ix.loc > iy.loc && (ix.loc+ix.len)-iy.loc < max_length  && abs(((ix.loc+ix.len)-iy.loc) - chromo_dist) <= uncertainty){
 														ip1.visited = true;
 														ip2.visited = true;
 														add_result(iw.con_id, iw, ix, INV, iy.chr, add_result(iz.con_id, iy, iz, INV, iz.chr, -1));														
 			long_inv1++;
+													}
+													else if(ix.loc < iy.loc && (iw.loc+iw.len)-iz.loc < max_length && abs(((iw.loc+iw.len)-iz.loc) - (iy.loc-(ix.loc+ix.len))) <= uncertainty){
+														ip1.visited = true;
+														ip2.visited = true;
+														add_result(iw.con_id, iw, ix, INV, iy.chr, add_result(iz.con_id, iy, iz, INV, iz.chr, -1));
+			long_inv2++;
 													}
 												}
 												else if(iw.rc && iz.rc){
@@ -1945,7 +2114,7 @@ if(j == CON_NUM_DEBUG){
 														ip1.visited = true;
 														ip2.visited = true;
 														add_result(iw.con_id, iw, ix, INV, iy.chr, add_result(iz.con_id, iy, iz, INV, iz.chr, -1));
-			long_inv2++;
+			long_inv3++;
 													}
 												}
 												
@@ -2089,6 +2258,7 @@ if(PRINT_STATS){
 
 	cerr << "Long_INV1: " <<  long_inv1 << endl;
 	cerr << "Long_INV2: " <<  long_inv2 << endl;
+	cerr << "Long_INV3: " <<  long_inv3 << endl;
 	cerr << "Long_INS: "  <<  long_ins << endl;
 	cerr << "Long_DEL: "  <<  long_del << endl;
 	cerr << "Long_TRANS: "<<  long_trans << endl;
@@ -2116,13 +2286,12 @@ if(PRINT_STATS){
 	cerr << "Ugly Fails: " << ugly_fails << endl;
 }
 
-	print_results(fo_vcf, fr_vcf);
+	print_results(fo_vcf, fr_vcf, uncertainty);
 
 	cerr << "Done." << endl;
 
 	fclose(fo_vcf);
 	fclose(fr_vcf);
-	fclose(fo_full);
 
 	delete[] sorted_intervals;
 

@@ -106,6 +106,7 @@ int feature_of_interest( char *fea )
 // ToDo: We do not fully make use of these properties in GRCh37.75 
 void ensembl_Reader(const char *gtf_file, map<string, vector <isoform> > &iso_gene_map, map<string, vector<gene_data> > &gene_sorted_map)
 {
+	bool new_gtf 	= false;
 	char *readline 	= (char*)malloc(MAX_LINE_ANNO);
 	char *seq 		= (char*)malloc(TOKEN_LENGTH_ANNO);
 	char *src	 	= (char*)malloc(TOKEN_LENGTH_ANNO);
@@ -147,7 +148,19 @@ void ensembl_Reader(const char *gtf_file, map<string, vector <isoform> > &iso_ge
 	FILE *fp = fopen( gtf_file, "r" );
 	while( NULL != fgets( readline, MAX_LINE_ANNO, fp) )
 	{
-		if ( 0 == strncmp("#", readline, 1) ) {	continue; }
+		if ( 0 == strncmp("#", readline, 1) ) {	
+
+			char * token = strtok(readline," ");
+			if(0 == strcmp("#!genome-version", token)){
+				token = strtok(NULL, " ");
+				char ver[3];
+				memcpy(ver, &token[4], 2);
+				ver[3] = '\0';
+				int ver_num = atoi(ver);
+				if(ver_num >= 38)new_gtf = true;
+			}
+			continue; 
+		}
 		
 		sscanf( readline, "%s %s %s %u %u %s %c %c%n",
 			seq, src, fea,  &start, &end, misc, &strand, &fr_cha, &offset );
@@ -159,7 +172,7 @@ void ensembl_Reader(const char *gtf_file, map<string, vector <isoform> > &iso_ge
 		
 		if ( !feature_of_interest( fea ) ) { continue; }
 
-		if(NEW_GTF){
+		if(new_gtf){
 			// exon and CDS only
 			sscanf( readline + offset, 
 			"%s %c%[^\"]%s\
@@ -491,20 +504,21 @@ void  locate_in_isoform( uint32_t s, uint32_t e, const isoform &iso, vector<uint
 }
 /**********************************************/
 int locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map,
-	string &best_gene, string &best_trans, vector<uint32_t> &vec_best)
+	string &best_gene, string &best_name, string &best_trans, vector<uint32_t> &vec_best)
 {
 	map<string, vector<uint32_t>> vec_all;
 
-	return locate_interval(ref, s, e, gene_vector, pos, iso_gene_map, best_gene, best_trans, vec_best, vec_all);
+	return locate_interval(ref, s, e, gene_vector, pos, iso_gene_map, best_gene, best_name, best_trans, vec_best, vec_all);
 }
 /**********************************************/
 int locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map,
-	string &best_gene, string &best_trans, vector<uint32_t> &vec_best, map<string, vector<uint32_t>> &vec_all)
+	string &best_gene, string &best_name, string &best_trans, vector<uint32_t> &vec_best, map<string, vector<uint32_t>> &vec_all)
 {
 	uint32_t max_e = 0, max_c = 0; // maximum overlap between [s,e] with any exons and any CDSs
 	uint32_t e_s = 0, e_e = 0, c_s = 0, c_e = 0;
 	vector<uint32_t> vec_match;
 	best_gene  = "intergenic";
+	best_name  = "intergenic";
 	best_trans = "intron";
 
 
@@ -524,7 +538,12 @@ int locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gen
 		else
 		{
 			string gene_id = gene_vector[i].gene_id;
-			if (  0 ==  flag){ flag = 1; best_gene = gene_id;}
+			string gene_name = gene_vector[i].gene_name;
+			if (  0 ==  flag){ 
+				flag = 1; 
+				best_gene = gene_id;
+				best_name = gene_name;
+			}
 			
 			iso_it = iso_gene_map.find( gene_id );
 			int num_iso = iso_it->second.size();
@@ -568,12 +587,13 @@ int locate_interval( const string &ref, uint32_t s, uint32_t e, const vector<gen
 
 /**********************************************/
 int locate_interval( const string &ref, uint32_t s, uint32_t e, const string &gene_id, const string &trans_id, const vector<gene_data> &gene_vector, int pos, const map<string, vector< isoform> > &iso_gene_map,
-	string &best_gene, string &best_trans, vector<uint32_t> &vec_best, map<string, vector<uint32_t>> &vec_all)
+	string &best_gene, string &best_name, string &best_trans, vector<uint32_t> &vec_best, map<string, vector<uint32_t>> &vec_all)
 {
 	uint32_t max_e = 0, max_c = 0; // maximum overlap between [s,e] with any exons and any CDSs
 	uint32_t e_s = 0, e_e = 0, c_s = 0, c_e = 0;
 	vector<uint32_t> vec_match;
 	best_gene  = "intergenic";
+	best_name  = "intergenic";
 	best_trans = "intron";
 
 
