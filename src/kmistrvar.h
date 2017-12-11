@@ -32,7 +32,7 @@ private:
 	const int ANCHOR_SIZE = 40;
 	const bool USE_ANNO = true;
 	const bool PRINT_READS = false;
-	const bool PRINT_STATS = true;
+	const bool PRINT_STATS = false;
 	const bool USE_BARCODES = false;
 	const vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
 	const vector<string> contexts = {"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
