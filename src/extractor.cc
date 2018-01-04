@@ -563,14 +563,7 @@ extractor::extractor(string filename, string output_prefix, int ftype, int oea, 
 	delete parser;
 	
 	ERROR("");
-	//ERROR( "\nMax %d %d %d \n", max_size, max_orphan, max_oea);
-	//ERROR( "\nFinal %u %u %u \n", map_read.size(), map_orphan.size(), map_oea.size() );
-	//fclose(ftest);
 	
-	//f_min_length  = fopen ((output_prefix + "min_length").c_str(), "w");
-	//fprintf(f_min_length, "%d\n", min_length);
-	//fclose( f_min_length);
-	// close file
 	if (oea)
 	{
 		fclose(foea_mapped);
@@ -651,8 +644,7 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 		if ( 0 == r1) { r1 = (int) strlen( rc.getSequence() ); }
 		parse_sc( rc2.getCigar(), m2, r2 );
 		if ( 0 == r2) { r2 = (int) strlen( rc2.getSequence() ); }
-		//fprintf(stdout, "<%s %s %d %d %s %d %d\n", rc.getReadName(), rc.getCigar(), m1, r1, rc2.getCigar(), m2, r2);
-		// 
+		
 		if ( 0 < r1 && 0 < r2 )
 		{
 			if ( ( 0x2 != ( 0x2 & rc.getMappingFlag() ) ) || ( clip_ratio > ( m1 + m2 )*1.0/( r1 + r2 ) ) )
@@ -717,12 +709,6 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 		parser = new SAMParser(filename);
 
 	string comment = parser->readComment();
-
-	//size_t pos = ftell(fo);
-	//fprintf(fo, "%d %d %d %d %s\n", p_cluster_id, vec.size(), p_start, p_end, p_ref.c_str());
-	//for (auto &i: vec)
-	//	fprintf(fo, "%s %s %d\n", i.first.first.c_str(), i.first.second.c_str(), i.second);
-	//return pos
 
 
 	FILE *fo   = fopen( (output_prefix + ".partition").c_str()      , "wb");
@@ -809,11 +795,9 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 					strncpy( ref,  rc.getChromosome(), 1000);
 					vec_read.clear();
 				}
-				//fprintf( stderr, "=%s %d %s %s %d %d %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), rc.getCigar(),pos, pair_pos, tlen, t_s, t_e, s1, e1);
 				if ( oea_flag )
 				{
 					tmp_c = dump_oea( rc, map_oea, tmp, t_loc );
-					//fprintf(stderr, ">OEA %d %s\n", t_loc, tmp.c_str() );
 					if (t_loc)
 					{
 						if ( cluster_flag && num_read < max_num_read )
@@ -828,12 +812,10 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 							cluster_flag = 0;
 						}
 					}
-					//{	fprintf( stdout, "%s %s", rc.getChromosome(), tmp.c_str());}
 				}
 				else
 				{
 					tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99 );			
-					//fprintf(stderr, ">MISC %d %s\n", t_loc, tmp.c_str() );
 					if (t_loc)
 					{
 						if ( cluster_flag && num_read < max_num_read )
@@ -850,49 +832,6 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 					}
 				}
 			}
-				////fprintf( stderr, "=%s %d %s %d %d %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), pos, pair_pos, tlen, t_s, t_e, s1, e1);
-				//if ( strncmp(ref, rc.getChromosome(), 1000 ) || (e1 < t_s) )
-				//{
-				//	if ( num_read > 0 )
-				//	{
-				//		fprintf( stderr, "%s %u %u %d %d\n", ref, s1, e1, num_read, t_s -e1 );
-				//		fprintf( stderr, "?_%s_%s_%d_%d_%d\n", ref, rc.getChromosome(), strncmp(ref, rc.getChromosome(), 1000 ), rc.getChromosome() != ref, e1 < t_s );
-				//		fprintf( stderr, ">%s %d %s %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), pos, pair_pos, tlen, t_s, t_e);
-				//		
-				//	}
-				//	s1 = t_s;
-				//	e1 = t_e;
-				//	num_read = 0;
-				//	strncpy( ref,  rc.getChromosome(), 1000);
-				//}
-				//else if	( e1 < t_e) e1 = t_e;
-				//else{
-				//	fprintf( stderr, "=%s %d %s %d %d %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), pos, pair_pos, tlen, t_s, t_e, s1, e1);
-				//	}
-
-				//num_read++;
-			//}
-			////list < int > list_pos; // p_loc on the ref genome
-			////list < map<string, Record> > list_read;	// read name and record on that p_loc
-			////list < string > list_msg;	// corresponding string for flushing
-			//else if ( oea_flag )
-			//{
-			//	if ( oea )
-			//	{
-			//		tmp_c = dump_oea( rc, map_oea, TMP);
-			//	}
-
-			//}
-			//// Hints:  BWA can report concordant mappings with next > pos with negative tlen
-			//else 
-			//{
-			//	tmp_size = examine_mapping( rc, map_read, foea_mapped, foea_unmapped, fall_int, ftype, clip_ratio, min_length);
-			//	if ( tmp_size > max_size)
-			//	{	
-			//		max_size = tmp_size;
-			//	}
-			//	
-			//}
 			count++; if (0 == count%100000){fprintf( stderr, ".");}
 		}
 		parser->readNext();
@@ -911,24 +850,6 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	ERROR("");
 	fclose(fo);
 	fclose(fidx);
-	//ERROR( "\nMax %d %d %d \n", max_size, max_orphan, max_oea);
-	//ERROR( "\nFinal %u %u %u \n", map_read.size(), map_orphan.size(), map_oea.size() );
-	//fclose(ftest);
-	
-	//f_min_length  = fopen ((output_prefix + "min_length").c_str(), "w");
-	//fprintf(f_min_length, "%d\n", min_length);
-	//fclose( f_min_length);
-	// close file
-	//if (oea)
-	//{
-	//	fclose(foea_mapped);
-	//	fclose(foea_unmapped);
-	//}
-	//if (orphan)
-	//{
-	//	fclose(forphan);
-	//}
-	//fclose(fall_int);
 }
 /***************************************************************/
 extractor::~extractor()

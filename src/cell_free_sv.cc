@@ -7,7 +7,6 @@
 #include <map>
 #include <zlib.h>
 #include <getopt.h>
-#include "../include/cxxopts.hpp"
 #include "partition.h"
 #include "common.h"
 #include "assembler.h"
@@ -639,7 +638,6 @@ int main(int argc, char *argv[])
 	else if ( 1 == op_code  )
 	{
 		extractor ext( input_sam, out_prefix, 3, 1, 0, 0.99 );
-		//extractor ext( input_sam, out_prefix, 1000, 0.99);
 	}	
 	else if ( 2 == op_code  )
 	{
