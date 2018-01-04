@@ -269,6 +269,17 @@ int parse_sc( const char *cigar, int &match_l, int &read_l )
 	return 0;
 }
 /****************************************************************/
+int get_endpoint( const uint32_t pos, const uint32_t pair_pos, const int match_l, const int tlen, int &t_s, int &t_e )
+{
+	t_s = pos;
+	t_e = pos + tlen - 1;
+	if ( 0 > tlen )
+	{
+		t_e = pos + match_l - 1;
+		t_s = pair_pos;
+	}
+}
+/****************************************************************/
 int process_orphan( const Record &rc, map<string,  Record> &map_orphan, FILE *forphan, FILE *f_int, int ftype)
 {
 	map<string, Record>::iterator it;
@@ -452,6 +463,7 @@ int examine_mapping( const Record &rc, map<string, Record > &map_read, FILE *f_m
 	}
 	return (int) map_read.size();
 }
+
 // select any reads whose clipping ratio is less than the clip_ratio in the analysis for mrsfast mapping
 /****************************************************************/
 extractor::extractor(string filename, string output_prefix, int ftype, int oea, int orphan, double clip_ratio = 0.99 ) 
@@ -569,6 +581,355 @@ extractor::extractor(string filename, string output_prefix, int ftype, int oea, 
 		fclose(forphan);
 	}
 	fclose(fall_int);
+}
+/***************************************************************/
+int dump_oea( const Record &rc, map<string, Record> &map_oea, string &tmp, int &anchor_pos )
+{
+	map<string, Record>::iterator it;
+	it = map_oea.find( rc.getReadName() );
+	string seq = "";
+	int flag   = 0, reversed = 0;
+	anchor_pos    = 0;
+	if ( it != map_oea.end() )	
+	{
+		if ( (0x4 == ( 0x4 & rc.getMappingFlag() ) ) )
+		{
+			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
+			//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+			flag = it->second.getMappingFlag();
+		}
+		else // decide position
+		{
+			flag = rc.getMappingFlag();
+		}
+		
+		anchor_pos = rc.getLocation(); 
+		if (flag & 0x10)
+		{ // anchor reversed, mate positive
+			seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+			tmp = S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+		}
+		else
+		{ 
+			seq = (!reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+			tmp = S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos);
+		}
+		
+		map_oea.erase(it);
+	}
+	else
+	{
+		map_oea[ rc.getReadName() ] = rc;
+	}
+	return (int)map_oea.size();
+}
+
+// input: a record and a map for all mappings.
+// output: read name along with its location 
+/****************************************************************/
+int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp, int &anchor_pos, double clip_ratio )
+{
+	int flag = 0, reversed = 0;;
+	anchor_pos = 0;
+
+	map<string, Record >::iterator it = map_read.find( rc.getReadName() );
+	if ( it == map_read.end() ) 
+	{
+		map_read[rc.getReadName() ] = rc;
+	}
+	else
+	{	
+		Record rc2 = it->second; // with smaller pos
+		int part_flag = 0;
+		int flag_1 = 0, flag_2 = 0;//, t_flag = 0;
+		int r1 = 0, m1 = 0, r2 = 0, m2 = 0; 
+		int mate_flag = 0; // 0 for using rc in parition, 1 for using rc2
+		string seq;
+
+
+		parse_sc( rc.getCigar(), m1, r1 );
+		if ( 0 == r1) { r1 = (int) strlen( rc.getSequence() ); }
+		parse_sc( rc2.getCigar(), m2, r2 );
+		if ( 0 == r2) { r2 = (int) strlen( rc2.getSequence() ); }
+		//fprintf(stdout, "<%s %s %d %d %s %d %d\n", rc.getReadName(), rc.getCigar(), m1, r1, rc2.getCigar(), m2, r2);
+		// 
+		if ( 0 < r1 && 0 < r2 )
+		{
+			if ( ( 0x2 != ( 0x2 & rc.getMappingFlag() ) ) || ( clip_ratio > ( m1 + m2 )*1.0/( r1 + r2 ) ) )
+			{  part_flag = 1; }
+		}
+
+		if ( part_flag )
+		{
+			mate_flag = 1;
+			reversed = ((rc2.getMappingFlag()  & 0x10) == 0x10);
+			//seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
+			flag = rc.getMappingFlag();
+			anchor_pos = rc.getLocation();
+
+			if ( r1 -m1  > r2 - m2 )
+			{
+				mate_flag = 0;
+				reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
+				//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+				flag = rc2.getMappingFlag();
+				anchor_pos = rc2.getLocation();
+			}
+			if (flag & 0x10)
+			{ 	//mate has to be positive
+				if ( mate_flag)
+				{	seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
+				else
+				{	seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
+				tmp = S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+			}
+			else
+			{ 
+				if ( mate_flag)
+				{	seq = (!reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
+				else
+				{	seq = (!reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
+				tmp = S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos);
+			}
+		}
+		
+		map_read.erase( it );
+	}
+	return (int) map_read.size();
+}
+// Input: sorted SAM/BAM and a threshold value
+// Output: partition File
+// Description: select any reads whose clipping ratio is less than the clip_ratio in the analysis for downstream analysis
+/****************************************************************/
+extractor::extractor( string filename, string output_prefix, int max_dist, double clip_ratio = 0.99 ) 
+{
+	int max_num_read = 10000;
+	int min_length = -1;
+	FILE *fi = fopen(filename.c_str(), "rb");
+
+	char magic[2];
+	fread(magic, 1, 2, fi);
+	fclose(fi);
+
+	Parser *parser;
+	if (magic[0] == char(0x1f) && magic[1] == char(0x8b)) 
+		parser = new BAMParser(filename);
+	else
+		parser = new SAMParser(filename);
+
+	string comment = parser->readComment();
+
+	//size_t pos = ftell(fo);
+	//fprintf(fo, "%d %d %d %d %s\n", p_cluster_id, vec.size(), p_start, p_end, p_ref.c_str());
+	//for (auto &i: vec)
+	//	fprintf(fo, "%s %s %d\n", i.first.first.c_str(), i.first.second.c_str(), i.second);
+	//return pos
+
+
+	FILE *fo   = fopen( (output_prefix + ".partition").c_str()      , "wb");
+	FILE *fidx = fopen( (output_prefix + ".partition.idx").c_str() , "wb");
+	
+	map < string, Record > map_read;
+	map < string, Record > map_oea;
+	
+	//int max_size = 0, tmp_size = 0;
+	int max_c = 0, tmp_c = 0;
+	//int max_orphan = 0, max_oea = 0;
+	int count = 0;
+	
+	uint32_t flag;
+	uint32_t pos, pair_pos;
+	int32_t  tlen;
+	int orphan_flag, oea_flag, chimera_flag;
+
+	char ref[1000];
+	uint32_t start_loc = 0;
+	uint32_t p_loc     = 0;
+	uint32_t num_read  = 0;
+	//uint32_t dist      = 1000;
+	uint32_t base      = 0;
+	int      index     = 0;
+
+	string tmp = "";	
+	int s1 = 0, e1 = 0;
+	int match_l = 0, read_l = 0;
+	int t_s = 0, t_e = 0;
+	int t_loc;
+
+	int cluster_id = 1;
+	fpos_t cur_pos;
+	uint32_t p_start = 0, p_end = 0;
+	int cluster_flag = 1;
+	
+	vector< string > vec_read;
+	vec_read.reserve(max_num_read);
+
+	while ( parser->hasNext() )
+	{
+		const Record &rc = parser->next();
+		Record cur_rc(rc);
+
+		flag     = rc.getMappingFlag();
+		pos      = rc.getLocation();
+		pair_pos = rc.getPairLocation();
+		tlen     = rc.getTemplateLength();
+		
+		p_loc = pos;
+		if ( 0 > tlen )
+		{ 
+			p_loc = pair_pos;
+		}
+
+		if ( flag < 256 ) // To-Do: include supplementary split-mapping as potential mapping locations
+		{
+			orphan_flag  = (  ( rc.getMappingFlag() & 0xc) == 0xc); 
+			oea_flag     = ( (( rc.getMappingFlag() & 0xc) == 0x4) || (( rc.getMappingFlag() & 0xc) == 0x8) );
+			chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
+			
+			if ( !orphan_flag and !chimera_flag )
+			{
+
+				parse_sc( rc.getCigar(), match_l, read_l );
+				get_endpoint( pos, pair_pos, match_l, tlen, t_s, t_e);
+				
+				if ( strncmp(ref, rc.getChromosome(), 1000 ) || max_dist < pos - p_start   )
+				{
+					if ( num_read && cluster_flag )
+					{
+						fgetpos( fo, &cur_pos );
+						fprintf(fo, "%d %d %d %d %s\n", cluster_id++, vec_read.size(), p_start, p_end, ref);
+						for (auto &i: vec_read)
+							fprintf(fo, "%s", i.c_str() );
+						fwrite( &cur_pos, 1, sizeof(size_t), fidx);
+					}
+					
+					p_start     = 0;
+					p_end       = 0;
+					num_read    = 0;
+					cluster_flag = 1;
+					strncpy( ref,  rc.getChromosome(), 1000);
+					vec_read.clear();
+				}
+				//fprintf( stderr, "=%s %d %s %s %d %d %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), rc.getCigar(),pos, pair_pos, tlen, t_s, t_e, s1, e1);
+				if ( oea_flag )
+				{
+					tmp_c = dump_oea( rc, map_oea, tmp, t_loc );
+					//fprintf(stderr, ">OEA %d %s\n", t_loc, tmp.c_str() );
+					if (t_loc)
+					{
+						if ( cluster_flag && num_read < max_num_read )
+						{	
+							vec_read.push_back( tmp );  
+							num_read++; 
+							p_end = t_loc;
+							if ( !p_start ){ p_start = t_loc;}
+						}
+						else
+						{
+							cluster_flag = 0;
+						}
+					}
+					//{	fprintf( stdout, "%s %s", rc.getChromosome(), tmp.c_str());}
+				}
+				else
+				{
+					tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99 );			
+					//fprintf(stderr, ">MISC %d %s\n", t_loc, tmp.c_str() );
+					if (t_loc)
+					{
+						if ( cluster_flag && num_read < max_num_read )
+						{
+							vec_read.push_back( tmp );  
+							num_read++; 
+							p_end = t_loc;
+							if ( !p_start ){ p_start = t_loc;}
+						}
+						else
+						{
+							cluster_flag = 0;
+						}
+					}
+				}
+			}
+				////fprintf( stderr, "=%s %d %s %d %d %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), pos, pair_pos, tlen, t_s, t_e, s1, e1);
+				//if ( strncmp(ref, rc.getChromosome(), 1000 ) || (e1 < t_s) )
+				//{
+				//	if ( num_read > 0 )
+				//	{
+				//		fprintf( stderr, "%s %u %u %d %d\n", ref, s1, e1, num_read, t_s -e1 );
+				//		fprintf( stderr, "?_%s_%s_%d_%d_%d\n", ref, rc.getChromosome(), strncmp(ref, rc.getChromosome(), 1000 ), rc.getChromosome() != ref, e1 < t_s );
+				//		fprintf( stderr, ">%s %d %s %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), pos, pair_pos, tlen, t_s, t_e);
+				//		
+				//	}
+				//	s1 = t_s;
+				//	e1 = t_e;
+				//	num_read = 0;
+				//	strncpy( ref,  rc.getChromosome(), 1000);
+				//}
+				//else if	( e1 < t_e) e1 = t_e;
+				//else{
+				//	fprintf( stderr, "=%s %d %s %d %d %d %d %d %d %d\n", rc.getReadName(), rc.getMappingFlag(), rc.getChromosome(), pos, pair_pos, tlen, t_s, t_e, s1, e1);
+				//	}
+
+				//num_read++;
+			//}
+			////list < int > list_pos; // p_loc on the ref genome
+			////list < map<string, Record> > list_read;	// read name and record on that p_loc
+			////list < string > list_msg;	// corresponding string for flushing
+			//else if ( oea_flag )
+			//{
+			//	if ( oea )
+			//	{
+			//		tmp_c = dump_oea( rc, map_oea, TMP);
+			//	}
+
+			//}
+			//// Hints:  BWA can report concordant mappings with next > pos with negative tlen
+			//else 
+			//{
+			//	tmp_size = examine_mapping( rc, map_read, foea_mapped, foea_unmapped, fall_int, ftype, clip_ratio, min_length);
+			//	if ( tmp_size > max_size)
+			//	{	
+			//		max_size = tmp_size;
+			//	}
+			//	
+			//}
+			count++; if (0 == count%100000){fprintf( stderr, ".");}
+		}
+		parser->readNext();
+	}
+	
+	delete parser;
+
+	if ( num_read && cluster_flag )
+	{
+		fgetpos( fo, &cur_pos );
+		fprintf(fo, "%d %d %d %d %s\n", cluster_id, vec_read.size(), p_start, p_end, ref);
+		for (auto &i: vec_read)
+			fprintf(fo, "%s", i.c_str() );
+		fwrite( &cur_pos, 1, sizeof(size_t), fidx);
+	}
+	ERROR("");
+	fclose(fo);
+	fclose(fidx);
+	//ERROR( "\nMax %d %d %d \n", max_size, max_orphan, max_oea);
+	//ERROR( "\nFinal %u %u %u \n", map_read.size(), map_orphan.size(), map_oea.size() );
+	//fclose(ftest);
+	
+	//f_min_length  = fopen ((output_prefix + "min_length").c_str(), "w");
+	//fprintf(f_min_length, "%d\n", min_length);
+	//fclose( f_min_length);
+	// close file
+	//if (oea)
+	//{
+	//	fclose(foea_mapped);
+	//	fclose(foea_unmapped);
+	//}
+	//if (orphan)
+	//{
+	//	fclose(forphan);
+	//}
+	//fclose(fall_int);
 }
 /***************************************************************/
 extractor::~extractor()

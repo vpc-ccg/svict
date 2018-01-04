@@ -444,8 +444,8 @@ void printHELP()
 	LOG( "\t-s|--min_support:\tMin Read Support (default 2).");
 	LOG( "\t-S|--max_support:\tMax Read Support (default unlimited).");
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
-	LOG( "\t-m|--min_support:\tMin SV length (default 60).");
-	LOG( "\t-M|--max_support:\tMax SV length (default 20000).");
+	LOG( "\t-m|--min_length:\tMin SV length (default 60).");
+	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
 	LOG( "\t\nExample Command:");
 	LOG( "\t./SVICT -i input.sam -o tmp");
 	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o partition");
@@ -469,7 +469,7 @@ int main(int argc, char *argv[])
 	int sam_flag  = 0, 
 		un_flag   = 0,
 		ref_flag  = 0;
-	int op_code   = 0;
+	int op_code   = -1;
 
 	static struct option long_opt[] =
 	{
@@ -487,13 +487,14 @@ int main(int argc, char *argv[])
 		{ "min_support", required_argument, 0, 's' },
 		{ "max_support", required_argument, 0, 'S' },
 		{ "uncertainty", required_argument, 0, 'u' },
-		{ "min_support", required_argument, 0, 'm' },
-		{ "max_support", required_argument, 0, 'M' },
+		{ "min_length", required_argument, 0, 'm' },
+		{ "max_length", required_argument, 0, 'M' },
 		{ "unmapped", required_argument, 0, 'x' },
+		{ "exp", no_argument, 0, 'z' },
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpc:k:a:s:S:u:m:M:x:", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpc:k:a:s:S:u:m:M:x:z", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -551,6 +552,9 @@ int main(int argc, char *argv[])
 			case 'M':
 				M = atoi(optarg);
 				break;
+			case 'z':
+				op_code = 0 ;
+				break;
 			case '?':
 				fprintf(stderr, "Unknown parameter: %s\n", long_opt[opt_index].name);
 				return 1;
@@ -595,8 +599,9 @@ int main(int argc, char *argv[])
 		ERROR(  "Min SV length should be <= max SV length\n");
 		return 0;
 	}
-	
-	if ( 2 == sam_flag + ref_flag) { op_code = 3;}
+
+	if ( -1 <  op_code) { op_code = 0;}
+	else if ( 2 == sam_flag + ref_flag) { op_code = 3;}
 	else if ( 2 == sam_flag + un_flag) { op_code = 2;}
 	else if ( sam_flag )  { op_code = 1; }
 	else
@@ -605,16 +610,21 @@ int main(int argc, char *argv[])
 		printHELP();
 		return 0;
 	}
-
-	if ( 1 == op_code  )
+	
+	if ( 0 == op_code  )
+	{
+		extractor ext( input_sam, out_prefix, 1000, 0.99);
+	}	
+	else if ( 1 == op_code  )
 	{
 		extractor ext( input_sam, out_prefix, 3, 1, 0, 0.99 );
+		//extractor ext( input_sam, out_prefix, 1000, 0.99);
 	}	
 	else if ( 2 == op_code  )
 	{
 		partify( input_sam, unmapped, ( out_prefix + ".partition"), threshold );
 	}	
-	else
+	else if ( 3 == op_code)
 	{
 		predict(input_sam, reference, annotation, barcodes, print_reads, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, 0);
 	}
