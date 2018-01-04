@@ -10,7 +10,7 @@ git clone --recursive https://github.com/vpc-ccg/cfdna-sv.git
 cd cfdna-sv && make
 ```
 
-> **Note**: You will need at least g++ 4.7 to compile the source code.
+> **Note**: You will need at least g++ 4.9 to compile the source code.
 
 ### How do I run SVICT?
 You can use 
@@ -20,7 +20,7 @@ cfdna-sv/SVICT -h
 to get a description of each parameter. 
 
 #### Simulation Datasets Used for Evaluation
-Please check [this link](https://goo.gl/XXXXX) to download the simulation datasets that we used for evaluating SVICT. The folder contains 3 data files:
+Please check [this link](https://goo.gl/PTzJec) to download the simulation datasets that we used for evaluating SVICT. The folder contains 3 data files:
 1. sim.pe.sorted.bam: BAM file containing simulated cfDNA reads from a Venter genome with inserted SVs
 2. sim.pe.sorted.bam.bai: Corresponding index
 3. Homo_sapiens.GRCh38.87.dna.chromosomes.fa: reference genome for chromosome 1 from GRCh38.
