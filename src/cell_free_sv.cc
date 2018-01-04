@@ -75,10 +75,10 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 }
 
 /********************************************************************/
-void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const string &range, const string &out_vcf,
-					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
+void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const string &range, const string &out_vcf,
+					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int max_reads, const bool LOCAL_MODE, int ref_flank)
 {
-	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads);
+	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads, print_stats, max_reads );
 	predictor.run_kmistrvar(range, out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, ref_flank);
 }
 
@@ -438,6 +438,7 @@ void printHELP()
 	LOG( "\t\nOptional Parameters:");
 	LOG( "\t-b|--barcode:\tInput reads contain barcodes.");
 	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
+	LOG( "\t-P|--print_stats:\tPrint statistics as additional output.");
 	LOG( "\t-c|--cluster:\tClustering threshold (default 1000).");
 	LOG( "\t-k|--kmer:\tKmer length (default 14).");
 	LOG( "\t-a|--anchor:\tAnchor length (default 40).");
@@ -446,6 +447,7 @@ void printHELP()
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
 	LOG( "\t-m|--min_length:\tMin SV length (default 60).");
 	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
+	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster. \t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 10000).");
 	LOG( "\t\nExample Command:");
 	LOG( "\t./SVICT -i input.sam -o tmp");
 	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o partition");
@@ -463,9 +465,8 @@ int main(int argc, char *argv[])
 			out_prefix = "out" ,
 			annotation = "" ,
 			unmapped   = "" ;
-	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000;
-	bool barcodes = false;
-	bool print_reads = false;
+	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, max_reads = 10000;
+	bool barcodes = false, print_reads = false, print_stats = false;
 	int sam_flag  = 0, 
 		un_flag   = 0,
 		ref_flag  = 0;
@@ -481,6 +482,7 @@ int main(int argc, char *argv[])
 		{ "annotation", required_argument, 0, 'g' },
 		{ "barcodes", no_argument, 0, 'b' },
 		{ "print_reads", no_argument, 0, 'p' },
+		{ "print_stats", no_argument, 0, 'P' },
 		{ "cluster", required_argument, 0, 'c' },
 		{ "kmer", required_argument, 0, 'k' },
 		{ "anchor", required_argument, 0, 'a' },
@@ -489,12 +491,13 @@ int main(int argc, char *argv[])
 		{ "uncertainty", required_argument, 0, 'u' },
 		{ "min_length", required_argument, 0, 'm' },
 		{ "max_length", required_argument, 0, 'M' },
+		{ "max_reads", required_argument, 0, 'n' },
 		{ "unmapped", required_argument, 0, 'x' },
 		{ "exp", no_argument, 0, 'z' },
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpc:k:a:s:S:u:m:M:x:z", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:z", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -509,6 +512,9 @@ int main(int argc, char *argv[])
 				break;
 			case 'p':
 				print_reads = true; 
+				break;
+			case 'P':
+				print_stats = true; 
 				break;
 			case 'i':
 				input_sam.assign( optarg );
@@ -552,6 +558,9 @@ int main(int argc, char *argv[])
 			case 'M':
 				M = atoi(optarg);
 				break;
+			case 'n':
+				max_reads = atoi(optarg);
+				break;
 			case 'z':
 				op_code = 0 ;
 				break;
@@ -564,39 +573,51 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	
+	int pass = 1;
+	string msg = "";
 	// sanity checking
 	if( threshold < 0 ){
-		ERROR( "Cluster threshold must be a positive integer\n");
-		return 0;
+		msg += "\tError: Cluster threshold must be a positive integer\n";
+		pass = 0;
 		}
-	
+	if( max_reads <= 1 ){
+		msg += "\tError: Max reads in a cluster must be larger than 1\n";
+		pass = 0;
+		}
 	if( k < 5 ) {
-		ERROR( "K must be greater than 5\n");
-		return 0;
+		msg += "\tError: K must be greater than 5\n";
+		pass = 0;
 		}
 	if( a < k ) {
-		ERROR( "K must be less than or equal to anchor length\n");
-		return 0;
+		msg +=  "\tError: K must be less than or equal to anchor length\n";
+		pass = 0;
 		}
 	if( s < 2 ) {
-		ERROR( "Read support threshold must be an integer >= 2\n");
-		return 0;
+		msg += "\tError: Read support threshold must be an integer >= 2\n";
+		pass = 0;
 		}
 	if( s > S ) {
-		ERROR( "Min read support should be less than or equal to max read support\n");
-		return 0;
+		msg += "\tError: Min read support should be less than or equal to max read support\n";
+		pass = 0;
 		}
 	if ( u < 0 ){
-		ERROR( "Uncertainty must be a positive integer");
-		return 0;
+		msg += "\tError:Uncertainty must be a positive integer";
+		pass = 0;
 	}
 	if ( m <= u ){
-		ERROR( "Min SV length should be > uncertainty");
-		return 0;
+		msg += "\tError: Min SV length should be > uncertainty";
+		pass = 0;
 	}
 	if ( m > M ){
-		ERROR(  "Min SV length should be <= max SV length\n");
+		msg += "\tError: Min SV length should be <= max SV length\n";
+		pass =  0;
+	}
+
+	if ( !pass )
+	{
+		E("SVICT does not accept the following parameter values:\n\n%s\n\n", msg.c_str() );
+		E("Check help message for more information\n\n");
+		printHELP();
 		return 0;
 	}
 
@@ -613,7 +634,7 @@ int main(int argc, char *argv[])
 	
 	if ( 0 == op_code  )
 	{
-		extractor ext( input_sam, out_prefix, 1000, 0.99);
+		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99);
 	}	
 	else if ( 1 == op_code  )
 	{
@@ -626,7 +647,7 @@ int main(int argc, char *argv[])
 	}	
 	else if ( 3 == op_code)
 	{
-		predict(input_sam, reference, annotation, barcodes, print_reads, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, 0);
+		predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
 	}
 	return 0;
 }

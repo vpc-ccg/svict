@@ -136,7 +136,7 @@ private:
 	
 public:
 	
-	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads);
+	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads);
 	~kmistrvar();
 	void run_kmistrvar(const string &range, const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank);
 };

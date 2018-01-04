@@ -701,9 +701,8 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 // Output: partition File
 // Description: select any reads whose clipping ratio is less than the clip_ratio in the analysis for downstream analysis
 /****************************************************************/
-extractor::extractor( string filename, string output_prefix, int max_dist, double clip_ratio = 0.99 ) 
+extractor::extractor( string filename, string output_prefix, int max_dist, int max_num_read, double clip_ratio = 0.99 ) 
 {
-	int max_num_read = 10000;
 	int min_length = -1;
 	FILE *fi = fopen(filename.c_str(), "rb");
 

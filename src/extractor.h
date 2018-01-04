@@ -9,8 +9,8 @@ class extractor
 public:
 	extractor(string, string, int, int, int);
 	extractor(string, string); 
-	extractor(string, string, int, int, int, double);
-	extractor(string, string, int,  double);
+	extractor(string, string, int, int, int,  double);
+	extractor(string, string, int, int, double);
 	~extractor();
 
 };

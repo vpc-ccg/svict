@@ -15,8 +15,8 @@
 
 using namespace std;
 #define strequ(A,B) (strcmp(A.c_str(), B.c_str()) == 0)
-kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads) : 
-	variant_caller(partition_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), USE_BARCODES(barcodes), PRINT_READS(print_reads){
+kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads) : 
+	variant_caller(partition_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), USE_BARCODES(barcodes), PRINT_READS(print_reads), PRINT_STATS(print_stats), MAX_READS_PER_PART( max_reads) {
 
 	k = kmer_len;
 	num_kmer = (unsigned long long)pow(4,k);
