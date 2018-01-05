@@ -651,25 +651,28 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 			{  part_flag = 1; }
 		}
 
-		if ( part_flag )
+		if ( part_flag ) // default: use rc2 as anchor and 
 		{
-			mate_flag = 1;
-			reversed = ((rc2.getMappingFlag()  & 0x10) == 0x10);
-			//seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
-			flag = rc.getMappingFlag();
-			anchor_pos = rc.getLocation();
-
-			if ( r1 -m1  > r2 - m2 )
+			mate_flag = 0;
+			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
+			//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+			flag = rc2.getMappingFlag();
+			anchor_pos = rc2.getLocation();
+			
+			if ( r1 -m1  <  r2 - m2 )
 			{
-				mate_flag = 0;
-				reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
-				//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
-				flag = rc2.getMappingFlag();
-				anchor_pos = rc2.getLocation();
+				mate_flag = 1;
+				reversed = ((rc2.getMappingFlag()  & 0x10) == 0x10);
+				//seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
+				flag = rc.getMappingFlag();
+				anchor_pos = rc.getLocation();
 			}
+
+
+
 			if (flag & 0x10)
 			{ 	//mate has to be positive
-				if ( mate_flag)
+				if ( mate_flag )
 				{	seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
 				else
 				{	seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
@@ -743,7 +746,8 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 
 	int cluster_id = 1;
 	fpos_t cur_pos;
-	uint32_t p_start = 0, p_end = 0;
+	//uint32_t p_start = 0, p_end = 0;
+	int p_start = 0, p_end = 0;
 	int cluster_flag = 1;
 	
 	vector< string > vec_read;
@@ -773,67 +777,57 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 			
 			if ( !orphan_flag and !chimera_flag )
 			{
+				//parse_sc( rc.getCigar(), match_l, read_l );
+				//get_endpoint( pos, pair_pos, match_l, tlen, t_s, t_e);
 
-				parse_sc( rc.getCigar(), match_l, read_l );
-				get_endpoint( pos, pair_pos, match_l, tlen, t_s, t_e);
-				
-				if ( strncmp(ref, rc.getChromosome(), 1000 ) || max_dist < pos - p_start   )
-				{
-					if ( num_read && cluster_flag )
-					{
-						fgetpos( fo, &cur_pos );
-						fprintf(fo, "%d %d %d %d %s\n", cluster_id++, vec_read.size(), p_start, p_end, ref);
-						for (auto &i: vec_read)
-							fprintf(fo, "%s", i.c_str() );
-						fwrite( &cur_pos, 1, sizeof(size_t), fidx);
-					}
-					
-					p_start     = 0;
-					p_end       = 0;
-					num_read    = 0;
-					cluster_flag = 1;
-					strncpy( ref,  rc.getChromosome(), 1000);
-					vec_read.clear();
-				}
+				t_loc = 0; 
 				if ( oea_flag )
 				{
 					tmp_c = dump_oea( rc, map_oea, tmp, t_loc );
-					if (t_loc)
-					{
-						if ( cluster_flag && num_read < max_num_read )
-						{	
-							vec_read.push_back( tmp );  
-							num_read++; 
-							p_end = t_loc;
-							if ( !p_start ){ p_start = t_loc;}
-						}
-						else
-						{
-							cluster_flag = 0;
-						}
-					}
 				}
 				else
 				{
 					tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99 );			
-					if (t_loc)
+				}	
+				
+				if ( t_loc )
+				{
+					if ( cluster_flag && num_read < max_num_read )
 					{
-						if ( cluster_flag && num_read < max_num_read )
+
+						if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)   )
 						{
-							vec_read.push_back( tmp );  
-							num_read++; 
-							p_end = t_loc;
-							if ( !p_start ){ p_start = t_loc;}
+							if ( num_read && cluster_flag )
+							{
+								fgetpos( fo, &cur_pos );
+								fprintf(fo, "%d %d %d %d %s\n", cluster_id++, vec_read.size(), p_start, p_end, ref);
+								for (auto &i: vec_read)
+									fprintf(fo, "%s", i.c_str() );
+								fwrite( &cur_pos, 1, sizeof(size_t), fidx);
+							}
+					
+							p_start     = 0;
+							p_end       = 0;
+							num_read    = 0;
+							cluster_flag = 1;
+							strncpy( ref,  rc.getChromosome(), 1000);
+							vec_read.clear();
 						}
-						else
-						{
-							cluster_flag = 0;
-						}
+						
+						vec_read.push_back( tmp );  
+						num_read++; 
+						p_end = t_loc;
+						if ( !p_start ){ p_start = t_loc;}
+					}
+					else
+					{
+						cluster_flag = 0;
 					}
 				}
+
 			}
-			count++; if (0 == count%100000){fprintf( stderr, ".");}
 		}
+		count++; if (0 == count%100000){fprintf( stderr, ".");}
 		parser->readNext();
 	}
 	

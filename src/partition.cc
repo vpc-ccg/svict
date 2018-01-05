@@ -104,7 +104,9 @@ vector<pair<pair<string, string>, int>> genome_partition::get_next ()
 	while (gzgets(fp, prev_string, 2000)) {
 		sscanf(prev_string,"%s %d %s %d", read_name, &flag, ref_name, &loc);
 		if (loc - p_start > distance || ref_name != p_ref)
+		{
 			break;
+		}
 		
 		add_read(read_name, flag, loc);
 		ploc = loc;
