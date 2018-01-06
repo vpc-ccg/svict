@@ -446,8 +446,11 @@ void printHELP()
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
 	LOG( "\t-m|--min_length:\tMin SV length (default 60).");
 	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
-	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster. \t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 10000).");
+	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster.\n\t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 10000).");
+	LOG( "\t-z|--exp:\tExperimental express mode for generating partition from mapping file.\n");
+
 	LOG( "\t\nExample Command:");
+	LOG( "\t./SVICT -i input.sam -o partition -z\n\tThis will generate partition file directly from input.sam");
 	LOG( "\t./SVICT -i input.sam -o tmp");
 	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o partition");
 	LOG( "\t./SVICT -i partition -r human_genome.fa -o final");
