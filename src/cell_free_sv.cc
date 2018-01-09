@@ -450,10 +450,12 @@ void printHELP()
 	LOG( "\t-z|--exp:\tExperimental express mode for generating partition from mapping file.\n");
 
 	LOG( "\t\nExample Command:");
-	LOG( "\t./SVICT -i input.sam -o partition -z\n\tThis will generate partition file directly from input.sam");
-	LOG( "\t./SVICT -i input.sam -o tmp");
-	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o partition");
-	LOG( "\t./SVICT -i partition -r human_genome.fa -o final");
+	LOG( "\tRunning SVICT from a SAM/BAM file can be done in single command:");
+	LOG( "\t./SVICT -i input.sam -r human_genome.fa -o final -z\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
+	LOG( "\tSVICT also supports the following functions:");
+	LOG( "\t./SVICT -i input.sam -o tmp\n\t\tThis command will generate partition file tmp.partition from input.sam.\n\n");
+	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o final\n\t\tThis command will generate the partition file final.partition from tmp.anchor and tmp.unmapped.\n\n");
+	LOG( "\t./SVICT -i final.partition -r human_genome.fa -o final\n\t\tThis command will generate prediction result final.vcf from final.partition.\n\n");
 }
 /********************************************************************/
 int main(int argc, char *argv[])
@@ -614,6 +616,10 @@ int main(int argc, char *argv[])
 		msg += "\tError: Min SV length should be <= max SV length\n";
 		pass =  0;
 	}
+	if ( !( op_code + ref_flag) ){
+		msg += "\tError: Reference Genome (specify by -r ) is required to predict SV\n";
+		pass =  0;
+	}
 
 	if ( !pass )
 	{
@@ -637,6 +643,7 @@ int main(int argc, char *argv[])
 	if ( 0 == op_code  )
 	{
 		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99);
+		predict( ( out_prefix + ".partition") , reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
 	}	
 	else if ( 1 == op_code  )
 	{
