@@ -841,9 +841,9 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 					//if (  num_read < max_num_read )
 					//{
 
-						if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || num_read < max_num_read )
+						if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read <= num_read) )
 						{
-							if ( num_read && cluster_flag )
+							if ( num_read )//&& cluster_flag )
 							{
 								fgetpos( fo, &cur_pos );
 								fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
