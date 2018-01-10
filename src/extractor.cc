@@ -576,13 +576,16 @@ extractor::extractor(string filename, string output_prefix, int ftype, int oea, 
 	fclose(fall_int);
 }
 /***************************************************************/
-int dump_oea( const Record &rc, map<string, Record> &map_oea, string &tmp, int &anchor_pos )
+int dump_oea( const Record &rc, map<string, Record> &map_oea, string &tmp, int &anchor_pos, bool both_mates )
 {
 	map<string, Record>::iterator it;
 	it = map_oea.find( rc.getReadName() );
 	string seq = "";
-	int flag   = 0, reversed = 0;
+	int flag   = 0, 
+		u_flag = 0,
+		reversed = 0; // if the unmapped end is reversed or not
 	anchor_pos    = 0;
+	int mate_flag = 0; // 0 for using rc in parition, 1 for using rc2
 	if ( it != map_oea.end() )	
 	{
 		if ( (0x4 == ( 0x4 & rc.getMappingFlag() ) ) )
@@ -590,22 +593,42 @@ int dump_oea( const Record &rc, map<string, Record> &map_oea, string &tmp, int &
 			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
 			//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 			flag = it->second.getMappingFlag();
+			u_flag = rc.getMappingFlag();
 		}
 		else // decide position
 		{
+			reversed = ((it->second.getMappingFlag()  & 0x10) == 0x10);
 			flag = rc.getMappingFlag();
+			u_flag = it->second.getMappingFlag();
+			mate_flag = 1;
 		}
-		
+			
 		anchor_pos = rc.getLocation(); 
 		if (flag & 0x10)
 		{ // anchor reversed, mate positive
-			seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
-			tmp = S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+			if ( mate_flag )
+			{
+				seq = ( flag == u_flag) ? reverse_complement (it->second.getSequence()) : it->second.getSequence();
+				tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+			}
+			else
+			{
+				seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+				tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), it->second.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+			}
 		}
 		else
 		{ 
-			seq = (!reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
-			tmp = S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos);
+			if ( mate_flag )
+			{
+				seq = ( flag == u_flag) ? reverse_complement (it->second.getSequence()) : it->second.getSequence();
+				tmp = ( both_mates )    ? S("%s- %s %d\n%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+			}
+			else
+			{
+				seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+				tmp = ( both_mates )    ? S("%s- %s %d\n%s= %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), it->second.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+			}
 		}
 		
 		map_oea.erase(it);
@@ -620,9 +643,9 @@ int dump_oea( const Record &rc, map<string, Record> &map_oea, string &tmp, int &
 // input: a record and a map for all mappings.
 // output: read name along with its location 
 /****************************************************************/
-int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp, int &anchor_pos, double clip_ratio )
+int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp, int &anchor_pos, double clip_ratio, bool both_mates )
 {
-	int flag = 0, reversed = 0;;
+	int flag = 0, u_flag = 0, reversed = 0;;
 	anchor_pos = 0;
 
 	map<string, Record >::iterator it = map_read.find( rc.getReadName() );
@@ -657,6 +680,7 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
 			//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 			flag = rc2.getMappingFlag();
+			u_flag = rc.getMappingFlag();
 			anchor_pos = rc2.getLocation();
 			
 			if ( r1 -m1  <  r2 - m2 )
@@ -665,6 +689,7 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 				reversed = ((rc2.getMappingFlag()  & 0x10) == 0x10);
 				//seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
 				flag = rc.getMappingFlag();
+				u_flag = rc2.getMappingFlag();
 				anchor_pos = rc.getLocation();
 			}
 
@@ -672,19 +697,39 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 
 			if (flag & 0x10)
 			{ 	//mate has to be positive
+				//if ( mate_flag )
+				//{	seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
+				//else
+				//{	seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
+				//tmp = S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 				if ( mate_flag )
-				{	seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
+				{
+					seq = ( flag == u_flag) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
+					tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+				}
 				else
-				{	seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
-				tmp = S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+				{
+					seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+					tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc2.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+				}
 			}
 			else
 			{ 
-				if ( mate_flag)
-				{	seq = (!reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
+				//if ( mate_flag)
+				//{	seq = (!reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
+				//else
+				//{	seq = (!reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
+				//tmp = S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos);
+				if ( mate_flag )
+				{
+					seq = ( flag == u_flag) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
+					tmp = ( both_mates )    ? S("%s- %s %d\n%s= %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+				}
 				else
-				{	seq = (!reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
-				tmp = S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos);
+				{
+					seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+					tmp = ( both_mates )    ? S("%s- %s %d\n%s= %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc2.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
+				}
 			}
 		}
 		
@@ -696,7 +741,7 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 // Output: partition File
 // Description: select any reads whose clipping ratio is less than the clip_ratio in the analysis for downstream analysis
 /****************************************************************/
-extractor::extractor( string filename, string output_prefix, int max_dist, int max_num_read, double clip_ratio = 0.99 ) 
+extractor::extractor( string filename, string output_prefix, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false) 
 {
 	int min_length = -1;
 	FILE *fi = fopen(filename.c_str(), "rb");
@@ -783,11 +828,11 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 				t_loc = 0; 
 				if ( oea_flag )
 				{
-					tmp_c = dump_oea( rc, map_oea, tmp, t_loc );
+					tmp_c = dump_oea( rc, map_oea, tmp, t_loc, both_mates);
 				}
 				else
 				{
-					tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99 );			
+					tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99, both_mates );			
 				}	
 				
 				if ( t_loc )

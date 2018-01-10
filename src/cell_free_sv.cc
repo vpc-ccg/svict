@@ -448,6 +448,7 @@ void printHELP()
 	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
 	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster.\n\t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 10000).");
 	LOG( "\t-z|--exp:\tExperimental express mode for generating partition from mapping file.\n");
+	LOG( "\t-B|--both-mate:\tAdd both mate in the partition file (default: off).\n");
 
 	LOG( "\t\nExample Command:");
 	LOG( "\tRunning SVICT from a SAM/BAM file can be done in single command:");
@@ -471,6 +472,7 @@ int main(int argc, char *argv[])
 			unmapped   = "" ;
 	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, max_reads = 10000;
 	bool barcodes = false, print_reads = false, print_stats = false;
+	bool both_mates = false;
 	int sam_flag  = 0, 
 		un_flag   = 0,
 		ref_flag  = 0;
@@ -498,10 +500,11 @@ int main(int argc, char *argv[])
 		{ "max_reads", required_argument, 0, 'n' },
 		{ "unmapped", required_argument, 0, 'x' },
 		{ "exp", no_argument, 0, 'z' },
+		{ "both-mate", no_argument, 0, 'B' },
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:z", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:zB", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -513,6 +516,9 @@ int main(int argc, char *argv[])
 				return 0;
 			case 'b':
 				barcodes = true; 
+				break;
+			case 'B':
+				both_mates = true; 
 				break;
 			case 'p':
 				print_reads = true; 
@@ -642,7 +648,7 @@ int main(int argc, char *argv[])
 	
 	if ( 0 == op_code  )
 	{
-		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99);
+		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99, both_mates);
 		predict( ( out_prefix + ".partition") , reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
 	}	
 	else if ( 1 == op_code  )
