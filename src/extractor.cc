@@ -837,10 +837,11 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 				
 				if ( t_loc )
 				{
-					if ( cluster_flag && num_read < max_num_read )
-					{
+					//if ( cluster_flag && num_read < max_num_read )
+					//if (  num_read < max_num_read )
+					//{
 
-						if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)   )
+						if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || num_read < max_num_read )
 						{
 							if ( num_read && cluster_flag )
 							{
@@ -863,11 +864,11 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 						num_read++; 
 						p_end = t_loc;
 						if ( !p_start ){ p_start = t_loc;}
-					}
-					else
-					{
-						cluster_flag = 0;
-					}
+					//}
+					//else
+					//{
+					//	cluster_flag = 0;
+					//}
 				}
 
 			}
@@ -878,7 +879,7 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	
 	delete parser;
 
-	if ( num_read && cluster_flag )
+	if ( num_read )//&& cluster_flag )
 	{
 		fgetpos( fo, &cur_pos );
 		fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
