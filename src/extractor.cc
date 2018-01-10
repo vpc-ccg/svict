@@ -608,12 +608,12 @@ int dump_oea( const Record &rc, map<string, Record> &map_oea, string &tmp, int &
 		{ // anchor reversed, mate positive
 			if ( mate_flag )
 			{
-				seq = ( flag == u_flag) ? reverse_complement (it->second.getSequence()) : it->second.getSequence();
+				seq = ( reversed ) ? reverse_complement (it->second.getSequence()) : it->second.getSequence();
 				tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 			}
 			else
 			{
-				seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+				seq = ( reversed ) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 				tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), it->second.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 			}
 		}
@@ -621,12 +621,12 @@ int dump_oea( const Record &rc, map<string, Record> &map_oea, string &tmp, int &
 		{ 
 			if ( mate_flag )
 			{
-				seq = ( flag == u_flag) ? reverse_complement (it->second.getSequence()) : it->second.getSequence();
+				seq = ( !reversed ) ? reverse_complement (it->second.getSequence()) : it->second.getSequence();
 				tmp = ( both_mates )    ? S("%s- %s %d\n%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 			}
 			else
 			{
-				seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+				seq = ( !reversed ) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 				tmp = ( both_mates )    ? S("%s- %s %d\n%s= %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), it->second.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 			}
 		}
@@ -704,12 +704,12 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 				//tmp = S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 				if ( mate_flag )
 				{
-					seq = ( flag == u_flag) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
+					seq = ( reversed ) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
 					tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 				}
 				else
 				{
-					seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+					seq = ( reversed ) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 					tmp = ( both_mates )    ? S("%s+ %s %d\n%s_ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc2.getSequence(), anchor_pos ) :S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 				}
 			}
@@ -722,12 +722,12 @@ int dump_mapping( const Record &rc, map<string, Record > &map_read, string &tmp,
 				//tmp = S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos);
 				if ( mate_flag )
 				{
-					seq = ( flag == u_flag) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
+					seq = ( !reversed ) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
 					tmp = ( both_mates )    ? S("%s- %s %d\n%s= %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 				}
 				else
 				{
-					seq = ( flag == u_flag) ? reverse_complement (rc.getSequence()) : rc.getSequence();
+					seq = ( !reversed ) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 					tmp = ( both_mates )    ? S("%s- %s %d\n%s= %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos, rc.getReadName(), rc2.getSequence(), anchor_pos ) :S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
 				}
 			}
@@ -845,7 +845,7 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 							if ( num_read && cluster_flag )
 							{
 								fgetpos( fo, &cur_pos );
-								fprintf(fo, "%d %d %d %d %s\n", cluster_id++, vec_read.size(), p_start, p_end, ref);
+								fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
 								for (auto &i: vec_read)
 									fprintf(fo, "%s", i.c_str() );
 								fwrite( &cur_pos, 1, sizeof(size_t), fidx);
@@ -881,7 +881,7 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	if ( num_read && cluster_flag )
 	{
 		fgetpos( fo, &cur_pos );
-		fprintf(fo, "%d %d %d %d %s\n", cluster_id, vec_read.size(), p_start, p_end, ref);
+		fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
 		for (auto &i: vec_read)
 			fprintf(fo, "%s", i.c_str() );
 		fwrite( &cur_pos, 1, sizeof(size_t), fidx);

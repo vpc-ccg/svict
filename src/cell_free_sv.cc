@@ -622,18 +622,8 @@ int main(int argc, char *argv[])
 		msg += "\tError: Min SV length should be <= max SV length\n";
 		pass =  0;
 	}
-	if ( !( op_code + ref_flag) ){
-		msg += "\tError: Reference Genome (specify by -r ) is required to predict SV\n";
-		pass =  0;
-	}
 
-	if ( !pass )
-	{
-		E("SVICT does not accept the following parameter values:\n\n%s\n\n", msg.c_str() );
-		E("Check help message for more information\n\n");
-		printHELP();
-		return 0;
-	}
+
 
 	if ( -1 <  op_code) { op_code = 0;}
 	else if ( 2 == sam_flag + ref_flag) { op_code = 3;}
@@ -646,6 +636,20 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 	
+	//if ( !( op_code + ref_flag) ){
+	if ( ( 0 == op_code || 3 == op_code) && !ref_flag ){
+		msg += "\tError: Reference Genome (specify by -r ) is required to predict SV\n";
+		pass =  0;
+	}
+
+	if ( !pass )
+	{
+		E("SVICT does not accept the following parameter values:\n\n%s\n\n", msg.c_str() );
+		E("Check help message for more information\n\n");
+		printHELP();
+		return 0;
+	}
+
 	if ( 0 == op_code  )
 	{
 		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99, both_mates);
