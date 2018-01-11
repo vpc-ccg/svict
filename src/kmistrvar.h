@@ -1,5 +1,7 @@
 #ifndef __KMISTRVAR__
 #define __KMISTRVAR__
+#define GCC_VERSION (__GNUC__ * 1000 \
+                     + __GNUC_MINOR__ * 10 )
 
 #include <cstring>
 #include <bitset>
@@ -59,9 +61,15 @@ private:
 		int id;
 		long loc;// : 29;
 
+#if GCC_VERSION == 4080
+		bool operator<( const sortable_mapping& rhs) const{  //To address known GCC 4.8 bug
+			return this->loc < rhs.loc;
+		}
+#else 
 		bool operator<( const sortable_mapping& rhs){
 			return this->loc < rhs.loc;
 		}
+#endif
 	};
 
 	struct interval_pair{
