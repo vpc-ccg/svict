@@ -891,6 +891,224 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	fclose(fo);
 	fclose(fidx);
 }
+/****************************************************************/
+int parse_sa( const char *attr )
+{
+	int flag = 0;
+	while( *attr )
+	{
+		if ('S' == *attr )
+		{
+			flag = 1;
+		}
+		else if ( (1 == flag) && ( 'A' == *attr) )
+		{
+			flag = 2;
+		}
+		else if ( (2 == flag) && ( ':' == *attr) )
+		{
+			flag = 3;
+			break;
+		}
+		else
+		{
+			flag = 0;
+		}
+		attr++;
+	}
+	return flag;
+}
+/****************************************************************/
+extractor::extractor( string filename, string output_prefix, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true ) 
+{
+	int min_length = -1;
+	FILE *fi = fopen(filename.c_str(), "rb");
+
+	char magic[2];
+	fread(magic, 1, 2, fi);
+	fclose(fi);
+
+	Parser *parser;
+	if (magic[0] == char(0x1f) && magic[1] == char(0x8b)) 
+		parser = new BAMParser(filename);
+	else
+		parser = new SAMParser(filename);
+
+	string comment = parser->readComment();
+
+
+	//FILE *fo   = fopen( (output_prefix + ".partition").c_str()      , "wb");
+	//FILE *fidx = fopen( (output_prefix + ".partition.idx").c_str() , "wb");
+	
+	map < string, Record > map_read;
+	map < string, Record > map_oea;
+	
+	//int max_size = 0, tmp_size = 0;
+	int max_c = 0, tmp_c = 0;
+	//int max_orphan = 0, max_oea = 0;
+	int count = 0;
+	
+	uint32_t flag;
+	uint32_t pos, pair_pos;
+	int32_t  tlen;
+	int orphan_flag, oea_flag, chimera_flag;
+
+	char ref[1000];
+	uint32_t start_loc = 0;
+	uint32_t p_loc     = 0;
+	uint32_t num_read  = 0;
+	//uint32_t dist      = 1000;
+	uint32_t base      = 0;
+	int      index     = 0;
+
+	string tmp = "";	
+	int s1 = 0, e1 = 0;
+	int match_l = 0, read_l = 0;
+	int t_s = 0, t_e = 0;
+	int t_loc;
+
+	int cluster_id = 1;
+	fpos_t cur_pos;
+	//uint32_t p_start = 0, p_end = 0;
+	int p_start = 0, p_end = 0;
+	int cluster_flag = 1;
+	
+	vector< string > vec_read;
+	vec_read.reserve(max_num_read);
+
+	map<string, pair<string, string> > supply_dict;
+
+	int has_supple = 0;
+	int z = 0;
+	while ( parser->hasNext() )
+	{
+		const Record &rc = parser->next();
+		has_supple = 0;
+
+		flag     = rc.getMappingFlag();
+		//pos      = rc.getLocation();
+		//pair_pos = rc.getPairLocation();
+		//tlen     = rc.getTemplateLength();
+
+		if ( flag < 256 )
+		{
+			has_supple = parse_sa( rc.getOptional() );// parse SA
+			if ( has_supple )
+			{
+				auto it    = supply_dict.find( rc.getReadName() );
+				if ( it != supply_dict.end() )
+				{
+					if ( 0x40 == (flag&0x40) )
+					{
+						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName() ;
+					}
+					else
+					{
+						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName() ;
+					}
+
+				}
+				else
+				{
+					if ( 0x40 == (flag&0x40) )
+					{
+						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName(), "" }; 
+					}
+					else
+					{
+						supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName() } ;
+					}
+				}
+
+			}
+		}
+
+
+
+	//	p_loc = pos;
+	//	if ( 0 > tlen )
+	//	{ 
+	//		p_loc = pair_pos;
+	//	}
+
+	//	if ( flag < 256 ) // To-Do: include supplementary split-mapping as potential mapping locations
+	//	{
+	//		orphan_flag  = (  ( rc.getMappingFlag() & 0xc) == 0xc); 
+	//		oea_flag     = ( (( rc.getMappingFlag() & 0xc) == 0x4) || (( rc.getMappingFlag() & 0xc) == 0x8) );
+	//		chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
+	//		
+	//		if ( !orphan_flag and !chimera_flag )
+	//		{
+	//			//parse_sc( rc.getCigar(), match_l, read_l );
+	//			//get_endpoint( pos, pair_pos, match_l, tlen, t_s, t_e);
+
+	//			t_loc = 0; 
+	//			if ( oea_flag )
+	//			{
+	//				tmp_c = dump_oea( rc, map_oea, tmp, t_loc, both_mates);
+	//			}
+	//			else
+	//			{
+	//				tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99, both_mates );			
+	//			}	
+	//			
+	//			if ( t_loc )
+	//			{
+	//				//if ( cluster_flag && num_read < max_num_read )
+	//				//if (  num_read < max_num_read )
+	//				//{
+
+	//					if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read <= num_read) )
+	//					{
+	//						if ( num_read )//&& cluster_flag )
+	//						{
+	//							fgetpos( fo, &cur_pos );
+	//							fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
+	//							for (auto &i: vec_read)
+	//								fprintf(fo, "%s", i.c_str() );
+	//							fwrite( &cur_pos, 1, sizeof(size_t), fidx);
+	//						}
+	//				
+	//						p_start     = 0;
+	//						p_end       = 0;
+	//						num_read    = 0;
+	//						cluster_flag = 1;
+	//						strncpy( ref,  rc.getChromosome(), 1000);
+	//						vec_read.clear();
+	//					}
+	//					
+	//					vec_read.push_back( tmp );  
+	//					num_read++; 
+	//					p_end = t_loc;
+	//					if ( !p_start ){ p_start = t_loc;}
+	//				//}
+	//				//else
+	//				//{
+	//				//	cluster_flag = 0;
+	//				//}
+	//			}
+
+	//		}
+	//	}
+		count++; if (0 == count%100000){fprintf( stderr, ".");}
+		parser->readNext();
+	}
+	
+	delete parser;
+
+	//if ( num_read )//&& cluster_flag )
+	//{
+	//	fgetpos( fo, &cur_pos );
+	//	fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
+	//	for (auto &i: vec_read)
+	//		fprintf(fo, "%s", i.c_str() );
+	//	fwrite( &cur_pos, 1, sizeof(size_t), fidx);
+	//}
+	ERROR("Num here %lu\n", supply_dict.size() );
+	ERROR("");
+	//fclose(fo);
+	//fclose(fidx);
+}
 /***************************************************************/
 extractor::~extractor()
 {

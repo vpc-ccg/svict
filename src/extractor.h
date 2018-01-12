@@ -11,6 +11,7 @@ public:
 	extractor(string, string); 
 	extractor(string, string, int, int, int,  double);
 	extractor(string, string, int, int, double, bool);
+	extractor(string, string, int, int, double, bool, bool);
 	~extractor();
 
 };

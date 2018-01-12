@@ -477,6 +477,7 @@ int main(int argc, char *argv[])
 		un_flag   = 0,
 		ref_flag  = 0;
 	int op_code   = -1;
+	int two_pass = 0;
 
 	static struct option long_opt[] =
 	{
@@ -501,10 +502,11 @@ int main(int argc, char *argv[])
 		{ "unmapped", required_argument, 0, 'x' },
 		{ "exp", no_argument, 0, 'z' },
 		{ "both-mate", no_argument, 0, 'B' },
+		{ "two-pass", no_argument, 0, 't' },
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:zB", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:zBt", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -519,6 +521,9 @@ int main(int argc, char *argv[])
 				break;
 			case 'B':
 				both_mates = true; 
+				break;
+			case 't':
+				two_pass = true; 
 				break;
 			case 'p':
 				print_reads = true; 
@@ -626,6 +631,7 @@ int main(int argc, char *argv[])
 
 
 	if ( -1 <  op_code) { op_code = 0;}
+	else if ( 1 == two_pass ) { op_code = 4;}
 	else if ( 2 == sam_flag + ref_flag) { op_code = 3;}
 	else if ( 2 == sam_flag + un_flag) { op_code = 2;}
 	else if ( sam_flag )  { op_code = 1; }
@@ -667,5 +673,11 @@ int main(int argc, char *argv[])
 	{
 		predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
 	}
+	else if ( 4 == op_code )
+	{	E("WTA\n");
+		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99, both_mates, two_pass);
+		//predict( ( out_prefix + ".partition") , reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
+	}	
+
 	return 0;
 }
