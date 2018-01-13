@@ -189,6 +189,13 @@ bool BAMParser::readNext (void)
 			case 'f': buf += sprintf(buf, "f:%g", *(float*)(data + pos)); pos += 4; break;
 			case 'd': buf += sprintf(buf, "d:%lg", *(double*)(data + pos)); pos += 8; break;
 			case 'Z': 
+			//case 'Z': {
+			//	buf += sprintf(buf, "%c:", t); 
+			//	while (data[pos]) 
+			//		buf += sprintf(buf, "%c", data[pos++]); 
+			//	pos++; 
+			//	break;
+			//}
 			case 'H': {
 				buf += sprintf(buf, "%c:", t); 
 				while (data[pos]) 

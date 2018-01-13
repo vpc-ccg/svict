@@ -940,10 +940,8 @@ int scan_supply_mappings( const string filename, map<string, pair<string, string
 		if ( flag < 256 )
 		{
 			has_supple = parse_sa( rc.getOptional() );// parse SA
-			fprintf(stderr, "Optional %s %s\n", rc.getReadName(), rc.getOptional() );
 			if ( has_supple )
 			{
-				fprintf(stderr, "%s %s\n", rc.getReadName(), rc.getOptional() );
 				auto it    = supply_dict.find( rc.getReadName() );
 				if ( it != supply_dict.end() )
 				{
@@ -953,21 +951,23 @@ int scan_supply_mappings( const string filename, map<string, pair<string, string
 					}
 					else
 					{
-						supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getSequence() ;
+						supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
 					}
-
 				}
 				else
 				{
+					string token = "";
 					if ( 0x40 == (flag&0x40) )
 					{
-						//supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
-						supply_dict[rc.getReadName()] = std::make_pair( ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" ); 
+						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+						//supply_dict[rc.getReadName()] = std::make_pair( ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" ); 
+						//supply_dict[rc.getReadName()] = std::make_pair( ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), token ); 
 					}
 					else
 					{
-						//supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
-						supply_dict[rc.getReadName()] = std::make_pair(  "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ) ;
+						supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+						//supply_dict[rc.getReadName()] = std::make_pair(  "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ) ;
+						//supply_dict[rc.getReadName()] = std::make_pair(  token, ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ) ;
 					}
 				}
 
@@ -1003,12 +1003,13 @@ int dump_supply( const char *readname, const int flag, const size_t pos, const m
 				}
 				else if ( !se_flag )
 				{
-					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.first.c_str() ), pos );
+					//tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.first.c_str() ), pos );
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.first ).c_str(), pos );
 					num = 1;
 				}
 				else
 				{
-					tmp = S("%s- %s %d\n%s+ %s %d\n", readname, reverse_complement( it->second.first.c_str() ), pos, readname, it->second.second.c_str(), pos  );
+					tmp = S("%s- %s %d\n%s+ %s %d\n", readname, reverse_complement( it->second.first ).c_str(), pos, readname, it->second.second.c_str(), pos  );
 					num = 2;
 				}
 			}
@@ -1021,12 +1022,12 @@ int dump_supply( const char *readname, const int flag, const size_t pos, const m
 				}
 				else if ( !fr_flag )
 				{
-					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.second.c_str() ), pos );
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.second ).c_str(), pos );
 					num = 1;
 				}
 				else
 				{
-					tmp = S("%s- %s %d\n%s+ %s %d\n", readname, reverse_complement( it->second.second.c_str() ), pos, readname, it->second.first.c_str(), pos  );
+					tmp = S("%s- %s %d\n%s+ %s %d\n", readname, reverse_complement( it->second.second ).c_str() , pos, readname, it->second.first.c_str(), pos  );
 					num = 2;
 				}
 			}
@@ -1037,7 +1038,7 @@ int dump_supply( const char *readname, const int flag, const size_t pos, const m
 			{
 				if ( !fr_flag ) // forced to place the other mate
 				{
-					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.second.c_str() ) , pos );
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.second ).c_str() , pos );
 					num = 1;
 				}
 				else if ( !se_flag )
@@ -1047,7 +1048,7 @@ int dump_supply( const char *readname, const int flag, const size_t pos, const m
 				}
 				else
 				{
-					tmp = S("%s+ %s %d\n%s- %s %d\n", readname, it->second.first.c_str() , pos, readname, reverse_complement( it->second.second.c_str() ), pos  );
+					tmp = S("%s+ %s %d\n%s- %s %d\n", readname, it->second.first.c_str() , pos, readname, reverse_complement( it->second.second ).c_str(), pos  );
 					num = 2;
 				}
 			}
@@ -1055,7 +1056,7 @@ int dump_supply( const char *readname, const int flag, const size_t pos, const m
 			{
 				if ( !se_flag ) // forced to place the other mate
 				{
-					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.first.c_str() ) , pos );
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.first ).c_str()  , pos );
 					num = 1;
 				}
 				else if ( !fr_flag )
@@ -1065,7 +1066,7 @@ int dump_supply( const char *readname, const int flag, const size_t pos, const m
 				}
 				else
 				{
-					tmp = S("%s+ %s %d\n%s- %s %d\n", readname, it->second.second.c_str() , pos, readname, reverse_complement( it->second.first.c_str() ), pos  );
+					tmp = S("%s+ %s %d\n%s- %s %d\n", readname, it->second.second.c_str() , pos, readname, reverse_complement( it->second.first ).c_str() , pos  );
 					num = 2;
 				}
 			}
@@ -1098,12 +1099,11 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 		//map<string, pair<string, string> > supply_dict;
 		scan_supply_mappings( filename, supply_dict, ftype);
 		ERROR("\n%lu supplementary mappings are collected\n", supply_dict.size() );
-		map<string, pair<string, string> >::iterator it;
-		for( it = supply_dict.begin(); it != supply_dict.end(); it++)
-		{
-			fprintf( stdout, "%s\t%s\t%s\n", it->first.c_str(), it->second.first.c_str(), it->second.second.c_str() );
-		}
-		exit(0);
+		//map<string, pair<string, string> >::iterator it;
+		//for( it = supply_dict.begin(); it != supply_dict.end(); it++)
+		//{
+		//	fprintf( stdout, "%s\t%s\t%s\n", it->first.c_str(), it->second.first.c_str(), it->second.second.c_str() );
+		//}
 	}
 
 

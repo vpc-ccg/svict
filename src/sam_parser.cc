@@ -82,7 +82,7 @@ void SAMParser::parse (Record &record)
 			if (f == 12) {
 				c++;
 				while (*c) {
-					if (*c == '\t') *c = 0;
+					//if (*c == '\t') *c = 0;
 					c++;
 				}
 				break;
