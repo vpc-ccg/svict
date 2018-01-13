@@ -919,6 +919,166 @@ int parse_sa( const char *attr )
 	return flag;
 }
 /****************************************************************/
+int scan_supply_mappings( const string filename, map<string, pair<string, string> > &supply_dict, int ftype )
+{
+	Parser *parser;
+	if ( !ftype )
+		parser = new BAMParser(filename);
+	else
+		parser = new SAMParser(filename);
+
+	string comment = parser->readComment();
+	int flag = 0,
+		has_supple = 0;
+	uint32_t count = 0 ;
+	while ( parser->hasNext() )
+	{
+		const Record &rc = parser->next();
+		has_supple = 0;
+
+		flag     = rc.getMappingFlag();
+		if ( flag < 256 )
+		{
+			has_supple = parse_sa( rc.getOptional() );// parse SA
+			fprintf(stderr, "Optional %s %s\n", rc.getReadName(), rc.getOptional() );
+			if ( has_supple )
+			{
+				fprintf(stderr, "%s %s\n", rc.getReadName(), rc.getOptional() );
+				auto it    = supply_dict.find( rc.getReadName() );
+				if ( it != supply_dict.end() )
+				{
+					if ( 0x40 == (flag&0x40) )
+					{
+						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+					}
+					else
+					{
+						supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getSequence() ;
+					}
+
+				}
+				else
+				{
+					if ( 0x40 == (flag&0x40) )
+					{
+						//supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+						supply_dict[rc.getReadName()] = std::make_pair( ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" ); 
+					}
+					else
+					{
+						//supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+						supply_dict[rc.getReadName()] = std::make_pair(  "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ) ;
+					}
+				}
+
+			}
+		}
+		count++; if (0 == count%100000){fprintf( stderr, ".");}
+		parser->readNext();
+	}
+	delete parser;
+	return 0;
+}
+
+/****************************************************************/
+// return the entry obtained in the final string
+int dump_supply( const char *readname, const int flag, const size_t pos, const map<string, pair<string, string> > &supply_dict, bool both_mates, string &tmp)
+{
+	int num = 0 ;
+	auto it    = supply_dict.find( readname );
+	if ( it != supply_dict.end() )
+	{
+		int fr_flag = ( 0 < it->second.first.size()  ) ? 1 : 0;
+		int se_flag = ( 0 < it->second.second.size() ) ? 1 : 0;
+		// if the read indeed contains first and second mate 
+
+		if ( flag & 0x10 ) // clipped being reversed
+		{ 	
+			if ( flag & 0x40 ) // first mate being soft-clipped 
+			{
+				if ( !fr_flag ) // forced to place the other mate
+				{
+					tmp = S("%s+ %s %d\n", readname, it->second.second.c_str() , pos );
+					num = 1;
+				}
+				else if ( !se_flag )
+				{
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.first.c_str() ), pos );
+					num = 1;
+				}
+				else
+				{
+					tmp = S("%s- %s %d\n%s+ %s %d\n", readname, reverse_complement( it->second.first.c_str() ), pos, readname, it->second.second.c_str(), pos  );
+					num = 2;
+				}
+			}
+			else // second mate being soft-clipped
+			{
+				if ( !se_flag ) // forced to place the other mate
+				{
+					tmp = S("%s+ %s %d\n", readname, it->second.first.c_str() , pos );
+					num = 1;
+				}
+				else if ( !fr_flag )
+				{
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.second.c_str() ), pos );
+					num = 1;
+				}
+				else
+				{
+					tmp = S("%s- %s %d\n%s+ %s %d\n", readname, reverse_complement( it->second.second.c_str() ), pos, readname, it->second.first.c_str(), pos  );
+					num = 2;
+				}
+			}
+		}
+		else // clipped reads are forward
+		{
+			if ( flag & 0x40 ) // first mate being soft-clipped 
+			{
+				if ( !fr_flag ) // forced to place the other mate
+				{
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.second.c_str() ) , pos );
+					num = 1;
+				}
+				else if ( !se_flag )
+				{
+					tmp = S("%s+ %s %d\n", readname, it->second.first.c_str() , pos );
+					num = 1;
+				}
+				else
+				{
+					tmp = S("%s+ %s %d\n%s- %s %d\n", readname, it->second.first.c_str() , pos, readname, reverse_complement( it->second.second.c_str() ), pos  );
+					num = 2;
+				}
+			}
+			else // second mate being clipped
+			{
+				if ( !se_flag ) // forced to place the other mate
+				{
+					tmp = S("%s- %s %d\n", readname, reverse_complement( it->second.first.c_str() ) , pos );
+					num = 1;
+				}
+				else if ( !fr_flag )
+				{
+					tmp = S("%s+ %s %d\n", readname, it->second.second.c_str() , pos );
+					num = 1;
+				}
+				else
+				{
+					tmp = S("%s+ %s %d\n%s- %s %d\n", readname, it->second.second.c_str() , pos, readname, reverse_complement( it->second.first.c_str() ), pos  );
+					num = 2;
+				}
+			}
+		}
+	}
+	else
+	{
+		ERROR("Supply mappings %s are missing in two-pass scan. SAM/BAM files might be invalid\n", readname );
+	}
+
+	return num;
+}
+/****************************************************************/
 extractor::extractor( string filename, string output_prefix, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true ) 
 {
 	int min_length = -1;
@@ -928,8 +1088,27 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	fread(magic, 1, 2, fi);
 	fclose(fi);
 
-	Parser *parser;
+	int ftype = 1; // 0 for BAM and 1 for SAM
 	if (magic[0] == char(0x1f) && magic[1] == char(0x8b)) 
+		ftype = 0;
+
+	map<string, pair<string, string> > supply_dict;
+	if ( two_pass )
+	{
+		//map<string, pair<string, string> > supply_dict;
+		scan_supply_mappings( filename, supply_dict, ftype);
+		ERROR("\n%lu supplementary mappings are collected\n", supply_dict.size() );
+		map<string, pair<string, string> >::iterator it;
+		for( it = supply_dict.begin(); it != supply_dict.end(); it++)
+		{
+			fprintf( stdout, "%s\t%s\t%s\n", it->first.c_str(), it->second.first.c_str(), it->second.second.c_str() );
+		}
+		exit(0);
+	}
+
+
+	Parser *parser;
+	if ( !ftype )
 		parser = new BAMParser(filename);
 	else
 		parser = new SAMParser(filename);
@@ -937,15 +1116,13 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	string comment = parser->readComment();
 
 
-	//FILE *fo   = fopen( (output_prefix + ".partition").c_str()      , "wb");
-	//FILE *fidx = fopen( (output_prefix + ".partition.idx").c_str() , "wb");
+	FILE *fo   = fopen( (output_prefix + ".partition").c_str()      , "wb");
+	FILE *fidx = fopen( (output_prefix + ".partition.idx").c_str() , "wb");
 	
 	map < string, Record > map_read;
 	map < string, Record > map_oea;
 	
-	//int max_size = 0, tmp_size = 0;
 	int max_c = 0, tmp_c = 0;
-	//int max_orphan = 0, max_oea = 0;
 	int count = 0;
 	
 	uint32_t flag;
@@ -957,7 +1134,7 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	uint32_t start_loc = 0;
 	uint32_t p_loc     = 0;
 	uint32_t num_read  = 0;
-	//uint32_t dist      = 1000;
+	uint32_t num_mappings  = 0;
 	uint32_t base      = 0;
 	int      index     = 0;
 
@@ -969,127 +1146,98 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 
 	int cluster_id = 1;
 	fpos_t cur_pos;
-	//uint32_t p_start = 0, p_end = 0;
 	int p_start = 0, p_end = 0;
 	int cluster_flag = 1;
 	
 	vector< string > vec_read;
 	vec_read.reserve(max_num_read);
 
-	map<string, pair<string, string> > supply_dict;
 
-	int has_supple = 0;
-	int z = 0;
+	int num_supply = 0;
+	int fr_flag = 0, se_flag = 0; // existence for first and second mate in supply_dict
+	int add_read = 0 ;
+	//int reversed = 0, // 1 for rc, 0 for forward
+	//	mate = 0; 	  // 1 for first mate, 0 for second	
+	//int z = 0;
 	while ( parser->hasNext() )
 	{
 		const Record &rc = parser->next();
-		has_supple = 0;
+		//has_supple = 0;
+		add_read   = 0;
 
 		flag     = rc.getMappingFlag();
-		//pos      = rc.getLocation();
-		//pair_pos = rc.getPairLocation();
-		//tlen     = rc.getTemplateLength();
+		pos      = rc.getLocation();
+		pair_pos = rc.getPairLocation();
+		tlen     = rc.getTemplateLength();
 
-		if ( flag < 256 )
+		if ( flag < 256 ) // To-Do: include supplementary split-mapping as potential mapping locations
 		{
-			has_supple = parse_sa( rc.getOptional() );// parse SA
-			if ( has_supple )
+			orphan_flag  = (  ( rc.getMappingFlag() & 0xc) == 0xc); 
+			oea_flag     = ( (( rc.getMappingFlag() & 0xc) == 0x4) || (( rc.getMappingFlag() & 0xc) == 0x8) );
+			chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
+			
+			if ( !orphan_flag and !chimera_flag )
 			{
-				auto it    = supply_dict.find( rc.getReadName() );
-				if ( it != supply_dict.end() )
+				t_loc = 0; 
+				if ( oea_flag )
 				{
-					if ( 0x40 == (flag&0x40) )
-					{
-						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName() ;
-					}
-					else
-					{
-						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName() ;
-					}
-
+					tmp_c = dump_oea( rc, map_oea, tmp, t_loc, both_mates);
 				}
 				else
 				{
-					if ( 0x40 == (flag&0x40) )
-					{
-						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName(), "" }; 
-					}
-					else
-					{
-						supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getReadName() ) : rc.getReadName() } ;
-					}
+					tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99, both_mates );			
+				}	
+				
+				if ( t_loc )
+				{
+					add_read = (both_mates) ? 2: 1;
+
 				}
 
 			}
 		}
+		else if ( two_pass && ( 0x800 == (flag & 0x800) ) )
+		{		
+			// supply_dict does not always include both mate, so we need to check to prevent including empty reads
+			//
+			// insert the hard-clipped mate itself
+			add_read  = dump_supply( rc.getReadName(), flag, pos, supply_dict, both_mates, tmp);
+			if ( add_read )
+			{ 
+				t_loc = pos;
+			}
+		}
 
+		if ( add_read )
+		{
+			if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read <= num_read) )
+			{
+				if ( num_read )//&& cluster_flag )
+				{
+					fgetpos( fo, &cur_pos );
+					//fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
+					fprintf(fo, "%d %d %d %d %s\n", cluster_id++, num_mappings , p_start, p_end, ref);
+					for (auto &i: vec_read)
+						fprintf(fo, "%s", i.c_str() );
+					fwrite( &cur_pos, 1, sizeof(size_t), fidx);
+				}
 
+				p_start     = 0;
+				p_end       = 0;
+				num_read    = 0;
+				num_mappings = 0;
+				strncpy( ref,  rc.getChromosome(), 1000);
+				vec_read.clear();
+			}
 
-	//	p_loc = pos;
-	//	if ( 0 > tlen )
-	//	{ 
-	//		p_loc = pair_pos;
-	//	}
-
-	//	if ( flag < 256 ) // To-Do: include supplementary split-mapping as potential mapping locations
-	//	{
-	//		orphan_flag  = (  ( rc.getMappingFlag() & 0xc) == 0xc); 
-	//		oea_flag     = ( (( rc.getMappingFlag() & 0xc) == 0x4) || (( rc.getMappingFlag() & 0xc) == 0x8) );
-	//		chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
-	//		
-	//		if ( !orphan_flag and !chimera_flag )
-	//		{
-	//			//parse_sc( rc.getCigar(), match_l, read_l );
-	//			//get_endpoint( pos, pair_pos, match_l, tlen, t_s, t_e);
-
-	//			t_loc = 0; 
-	//			if ( oea_flag )
-	//			{
-	//				tmp_c = dump_oea( rc, map_oea, tmp, t_loc, both_mates);
-	//			}
-	//			else
-	//			{
-	//				tmp_c = dump_mapping( rc, map_read, tmp, t_loc, 0.99, both_mates );			
-	//			}	
-	//			
-	//			if ( t_loc )
-	//			{
-	//				//if ( cluster_flag && num_read < max_num_read )
-	//				//if (  num_read < max_num_read )
-	//				//{
-
-	//					if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read <= num_read) )
-	//					{
-	//						if ( num_read )//&& cluster_flag )
-	//						{
-	//							fgetpos( fo, &cur_pos );
-	//							fprintf(fo, "%d %d %d %d %s\n", cluster_id++, (both_mates)? 2*vec_read.size() :  vec_read.size() , p_start, p_end, ref);
-	//							for (auto &i: vec_read)
-	//								fprintf(fo, "%s", i.c_str() );
-	//							fwrite( &cur_pos, 1, sizeof(size_t), fidx);
-	//						}
-	//				
-	//						p_start     = 0;
-	//						p_end       = 0;
-	//						num_read    = 0;
-	//						cluster_flag = 1;
-	//						strncpy( ref,  rc.getChromosome(), 1000);
-	//						vec_read.clear();
-	//					}
-	//					
-	//					vec_read.push_back( tmp );  
-	//					num_read++; 
-	//					p_end = t_loc;
-	//					if ( !p_start ){ p_start = t_loc;}
-	//				//}
-	//				//else
-	//				//{
-	//				//	cluster_flag = 0;
-	//				//}
-	//			}
-
-	//		}
-	//	}
+			vec_read.push_back( tmp );  
+			num_read++; 
+			num_mappings += add_read;
+			p_end = t_loc;
+			if ( !p_start ){ p_start = t_loc;}
+		}
+			
+		
 		count++; if (0 == count%100000){fprintf( stderr, ".");}
 		parser->readNext();
 	}
@@ -1104,10 +1252,10 @@ extractor::extractor( string filename, string output_prefix, int max_dist, int m
 	//		fprintf(fo, "%s", i.c_str() );
 	//	fwrite( &cur_pos, 1, sizeof(size_t), fidx);
 	//}
-	ERROR("Num here %lu\n", supply_dict.size() );
+
 	ERROR("");
-	//fclose(fo);
-	//fclose(fidx);
+	fclose(fo);
+	fclose(fidx);
 }
 /***************************************************************/
 extractor::~extractor()

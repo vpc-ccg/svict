@@ -434,6 +434,9 @@ void printHELP()
 	LOG( "\t-r|--reference:\tReference Genome. Required for SV detection." );
 	LOG( "\t-g|--annotation:\tGTF file for gene annotation." );
 	LOG( "\t-x|--unmapped:\tUnmapped reads file for generating paritions.");
+	LOG( "\t\nWorkflow Parametes:");
+	LOG( "\t-z|--exp:\tExperimental express mode for generating partition from mapping file.\n");
+	LOG( "\t-t|--two-pass:\tScanning SAM/BAM file first to keep supplementary mapping information.\n");
 	LOG( "\t\nOptional Parameters:");
 	LOG( "\t-b|--barcode:\tInput reads contain barcodes.");
 	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
@@ -447,12 +450,14 @@ void printHELP()
 	LOG( "\t-m|--min_length:\tMin SV length (default 60).");
 	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
 	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster.\n\t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 10000).");
-	LOG( "\t-z|--exp:\tExperimental express mode for generating partition from mapping file.\n");
 	LOG( "\t-B|--both-mate:\tAdd both mate in the partition file (default: off).\n");
+
 
 	LOG( "\t\nExample Command:");
 	LOG( "\tRunning SVICT from a SAM/BAM file can be done in single command:");
 	LOG( "\t./SVICT -i input.sam -r human_genome.fa -o final -z\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
+	LOG( "\tRunning SVICT from a SAM/BAM in two-pass mode:");
+	LOG( "\t./SVICT -i input.sam -r human_genome.fa -o final -t\n\t\tThis command will generate prediction result final.vcf directly from input.sam with two-pass workflow.\n\n");
 	LOG( "\tSVICT also supports the following functions:");
 	LOG( "\t./SVICT -i input.sam -o tmp\n\t\tThis command will generate partition file tmp.partition from input.sam.\n\n");
 	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o final\n\t\tThis command will generate the partition file final.partition from tmp.anchor and tmp.unmapped.\n\n");
@@ -477,7 +482,7 @@ int main(int argc, char *argv[])
 		un_flag   = 0,
 		ref_flag  = 0;
 	int op_code   = -1;
-	int two_pass = 0;
+	int two_pass = 0, express = 0;
 
 	static struct option long_opt[] =
 	{
@@ -577,7 +582,7 @@ int main(int argc, char *argv[])
 				max_reads = atoi(optarg);
 				break;
 			case 'z':
-				op_code = 0 ;
+				express = 1;//op_code = 0 ;
 				break;
 			case '?':
 				fprintf(stderr, "Unknown parameter: %s\n", long_opt[opt_index].name);
@@ -629,8 +634,9 @@ int main(int argc, char *argv[])
 	}
 
 
+	
 
-	if ( -1 <  op_code) { op_code = 0;}
+	if ( 1 == express ) { op_code = 0;}
 	else if ( 1 == two_pass ) { op_code = 4;}
 	else if ( 2 == sam_flag + ref_flag) { op_code = 3;}
 	else if ( 2 == sam_flag + un_flag) { op_code = 2;}
@@ -647,7 +653,12 @@ int main(int argc, char *argv[])
 		msg += "\tError: Reference Genome (specify by -r ) is required to predict SV\n";
 		pass =  0;
 	}
+	if ( express && two_pass ) {
+		msg += "\tError: Express and Two Pass Mode are exclusive\n";
+		pass =  0;
+	}
 
+	
 	if ( !pass )
 	{
 		E("SVICT does not accept the following parameter values:\n\n%s\n\n", msg.c_str() );
@@ -674,9 +685,9 @@ int main(int argc, char *argv[])
 		predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
 	}
 	else if ( 4 == op_code )
-	{	E("WTA\n");
-		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99, both_mates, two_pass);
-		//predict( ( out_prefix + ".partition") , reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
+	{	E("Running in Two-Pass Mode\n");
+		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99, both_mates, two_pass );
+		predict( ( out_prefix + ".partition") , reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
 	}	
 
 	return 0;
