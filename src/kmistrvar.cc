@@ -825,10 +825,13 @@ double support_count = 0;
 		//Read in partition file
 		p = pt.read_partition(part_file, range, min_support, MAX_READS_PER_PART);
 
+		if (!p.size()) 
+			break;
+
 		if(USE_BARCODES)p = correct_reads(p);
 
 		if (!p.size()) 
-			break;
+			continue;
 
 		//Assemble contigs
 		contigs = as.assemble(p); 
@@ -838,6 +841,8 @@ if(PRINT_STATS){
 	part_count++;
 	contig_count1 += contigs.size(); 	
 }
+
+
 		
 		//TODO: Contig merging
 		for (auto &contig: contigs){ 
