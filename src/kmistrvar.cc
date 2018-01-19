@@ -759,6 +759,7 @@ end = clock();
 elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
 cerr << "FIRST PASS TIME: " << elapsed_secs << endl;
 cerr << endl;
+begin = clock();
 }
 
 	assemble(ext, min_support, max_support, LOCAL_MODE, max_dist, max_num_read, clip_ratio, both_mates, two_pass);

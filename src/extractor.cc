@@ -538,6 +538,7 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 		if ( flag < 256 )
 		{
 			has_supple = has_supply_mapping( rc.getOptional() );// parse SA
+			//has_supple = parse_sa( rc.getOptional() );
 			if ( has_supple )
 			{
 				auto it    = supply_dict.find( rc.getReadName() );
@@ -809,7 +810,7 @@ extractor::cluster extractor::get_next_cluster()
 					num_read    = 0;
 					num_mappings = 0;
 					strncpy( ref,  rc.getChromosome(), 1000);
-					parser->readNext();
+					parser->readNextSimple();
 					break;
 				}
 			}

@@ -267,9 +267,6 @@ bool BAMParser::readNextSimple (void)
 
  	// loc
  	currentRecord.intFields[Record::LOC] = di[1] + 1;
-
- 	// mq
- 	currentRecord.intFields[Record::MQ] = (di[2] >> 8) & 0xff;
  	
  	// cigar
  	uint32_t *op = (uint32_t*)(data + 8 * 4 + l_read_name);
@@ -293,9 +290,6 @@ bool BAMParser::readNextSimple (void)
 
 	// p_loc
  	currentRecord.intFields[Record::P_LOC] = di[6] + 1;
- 	
- 	// tlen
- 	currentRecord.intFields[Record::TLEN] = di[7];
 
  	// seq
  	char *sq = data + 8 * 4 + l_read_name + n_cigar_op;
@@ -307,22 +301,12 @@ bool BAMParser::readNextSimple (void)
  	buf[cc++] = 0;
  	currentRecord.strFields[Record::SEQ] = buf - line;
 	buf += cc;
- 	
- 	// qual
- 	char *q = data + 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2;
- 	cc = 0;
- 	for (int i = 0; i < l_seq; i++)
- 		buf[cc++] = q[i] + 33;
- 	if (l_seq == 0)
- 		buf[cc++] = '*';
- 	buf[cc++] = 0;
- 	currentRecord.strFields[Record::QUAL] = buf - line;
-	buf += cc;
 
 	currentRecord.strFields[Record::OPT] = buf - line;
 
  	// optional data ...
  	int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
+ 	bool found = false;
  	if (pos >= bsize)
  		buf[0] = 0;
  	else 
@@ -331,12 +315,15 @@ bool BAMParser::readNextSimple (void)
 		if(data[pos] == 'S' && data[pos+1] == 'A'){
 			*buf = '\t', buf++;
 			buf += sprintf(buf, "%c%c:", data[pos], data[pos+1]); 
-			pos += 3;
+			found = true;
+			break;
 		}
 		else{
 			pos++;
 		}
 	}
+	if(!found)buf += sprintf(buf, "NO");
+
 	*buf = 0;
 	currentRecord.lineSize = buf - currentRecord.line;
 	currentRecord.lineLength = buf - currentRecord.line;
