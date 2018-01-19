@@ -37,12 +37,12 @@ bool assembler::validate(const string &a, const string &b, int sz)
 	return true;
 }
 
-vector<contig> assembler::assemble(vector<pair<pair<string, string>, int>>& reads) 
+vector<contig> assembler::assemble(vector<pair<string, string>>& reads) 
 {
 
 	auto lens = set<int>();
 	for (auto &r: reads) {
-		lens.insert(r.first.second.size());
+		lens.insert(r.second.size());
 	}
 
 	auto s = set<string>(), R = set<string>();
@@ -58,8 +58,8 @@ vector<contig> assembler::assemble(vector<pair<pair<string, string>, int>>& read
 
 	for (auto &r: reads) {
 		//if (s.find(r) == s.end()) {
-			R.insert(r.first.second);
-			RN[r.first.second] = r.first.first;	
+			R.insert(r.second);
+			RN[r.second] = r.first;	
 		//	s.insert(r);
 		//}
 	}

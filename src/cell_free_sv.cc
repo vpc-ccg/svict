@@ -74,11 +74,12 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 }
 
 /********************************************************************/
-void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const string &range, const string &out_vcf,
-					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int max_reads, const bool LOCAL_MODE, int ref_flank)
+void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const string &out_vcf,
+					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int max_reads, const bool LOCAL_MODE,
+					int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
 	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads, print_stats, max_reads );
-	predictor.run_kmistrvar(range, out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, ref_flank);
+	predictor.run_kmistrvar(out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
 }
 
 /********************************************************************/
@@ -475,14 +476,13 @@ int main(int argc, char *argv[])
 			out_prefix = "out" ,
 			annotation = "" ,
 			unmapped   = "" ;
-	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, max_reads = 10000;
+	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, max_reads = 5000;
 	bool barcodes = false, print_reads = false, print_stats = false;
-	bool both_mates = false;
+	bool both_mates = false, two_pass = true;
 	int sam_flag  = 0, 
 		un_flag   = 0,
 		ref_flag  = 0;
 	int op_code   = -1;
-	int two_pass = 0, express = 0;
 
 	static struct option long_opt[] =
 	{
@@ -505,13 +505,12 @@ int main(int argc, char *argv[])
 		{ "max_length", required_argument, 0, 'M' },
 		{ "max_reads", required_argument, 0, 'n' },
 		{ "unmapped", required_argument, 0, 'x' },
-		{ "exp", no_argument, 0, 'z' },
+		{ "express", no_argument, 0, 'z' },
 		{ "both-mate", no_argument, 0, 'B' },
-		{ "two-pass", no_argument, 0, 't' },
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:zBt", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:zB", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -526,9 +525,6 @@ int main(int argc, char *argv[])
 				break;
 			case 'B':
 				both_mates = true; 
-				break;
-			case 't':
-				two_pass = true; 
 				break;
 			case 'p':
 				print_reads = true; 
@@ -582,7 +578,7 @@ int main(int argc, char *argv[])
 				max_reads = atoi(optarg);
 				break;
 			case 'z':
-				express = 1;//op_code = 0 ;
+				two_pass = false;
 				break;
 			case '?':
 				fprintf(stderr, "Unknown parameter: %s\n", long_opt[opt_index].name);
@@ -635,26 +631,9 @@ int main(int argc, char *argv[])
 
 
 	
-
-	if ( 1 == express ) { op_code = 0;}
-	else if ( 1 == two_pass ) { op_code = 4;}
-	else if ( 2 == sam_flag + ref_flag) { op_code = 3;}
-	else if ( 2 == sam_flag + un_flag) { op_code = 2;}
-	else if ( sam_flag )  { op_code = 1; }
-	else
-	{
-		ERROR("Ambiguous mode.\n");
-		printHELP();
-		return 0;
-	}
-	
 	//if ( !( op_code + ref_flag) ){
-	if ( ( 0 == op_code || 3 == op_code) && !ref_flag ){
+	if ( !ref_flag ){
 		msg += "\tError: Reference Genome (specify by -r ) is required to predict SV\n";
-		pass =  0;
-	}
-	if ( express && two_pass ) {
-		msg += "\tError: Express and Two Pass Mode are exclusive\n";
 		pass =  0;
 	}
 
@@ -667,28 +646,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if ( 0 == op_code  )
-	{
-		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99, both_mates);
-		predict( ( out_prefix + ".partition") , reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
-	}	
-	else if ( 1 == op_code  )
-	{
-		extractor ext( input_sam, out_prefix, 3, 1, 0, 0.99 );
-	}	
-	else if ( 2 == op_code  )
-	{
-		partify( input_sam, unmapped, ( out_prefix + ".partition"), threshold );
-	}	
-	else if ( 3 == op_code)
-	{
-		predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
-	}
-	else if ( 4 == op_code )
-	{	E("Running in Two-Pass Mode\n");
-		extractor ext( input_sam, out_prefix, 1000, max_reads, 0.99, both_mates, two_pass );
-		predict( ( out_prefix + ".partition") , reference, annotation, barcodes, print_reads, print_stats, "0-999999999", (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, 0);
-	}	
+	predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, threshold, max_reads, 0.99, both_mates, two_pass);
 
 	return 0;
 }

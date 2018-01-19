@@ -14,6 +14,7 @@
 #include "assembler_ext.h"
 #include "genome.h"
 #include "annotation.h"
+#include "extractor.h"
 #include "../include/tsl/sparse_map.h"
 
 using namespace std;
@@ -26,7 +27,7 @@ private:
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -1000;
+	const int CON_NUM_DEBUG = -1719;//1357;//8562;
 	const int REPEAT_LIMIT1 = 6;   //distant 5
 	const int REPEAT_LIMIT2 = 50;  //close
 	const int REPEAT_LIMIT3 = 400; //total 400
@@ -131,12 +132,12 @@ private:
 	string con_string(int& id, int start, int len);
 	compressed_contig compress(contig& con);
 	pair<unsigned short,pair<unsigned short,unsigned short>> compute_support(int& id, int start, int end);
-	vector<pair<pair<string, string>, int>> correct_reads(vector<pair<pair<string, string>, int>> reads);
+	vector<pair<string, string>> correct_reads(vector<pair<string, string>> reads);
 	long add_result(int id, mapping_ext& m1, mapping_ext& m2, short type, char pair_chr, long pair_loc);
 	void print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
-	void assemble(const string &range, int min_support, int max_support, const bool LOCAL_MODE, int ref_flank);
+	void assemble(extractor &ext, int min_support, int max_support, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass);
 	void generate_intervals(const string &out_vcf, const bool LOCAL_MODE);
 	void predict_variants(const string &out_vcf, int uncertainty, int min_length, int max_length);
 	bool bfs(const int DEPTH, int** rGraph, int s, int t, int parent[]);
@@ -144,8 +145,8 @@ private:
 	
 public:
 	
-	kmistrvar(int kmer_len, int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads);
+	kmistrvar(int kmer_len, int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads);
 	~kmistrvar();
-	void run_kmistrvar(const string &range, const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank);
+	void run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true);
 };
 #endif

@@ -15,10 +15,10 @@
 
 using namespace std;
 
-variant_caller::variant_caller(const string &partition_file, const string &reference) : 
+variant_caller::variant_caller(const string &input_file, const string &reference) : 
 		as(OVERLAP_NEW), ref(reference.c_str()){
 
-	part_file = partition_file;
+	in_file = input_file;
 }
 
 variant_caller::~variant_caller(){

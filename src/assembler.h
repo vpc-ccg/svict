@@ -56,5 +56,5 @@ public:
 	vector<int> topsort();
 
 public:
-	vector<contig> assemble(vector<pair<pair<string, string>, int>>& reads);
+	vector<contig> assemble(vector<pair<string, string>>& reads);
 };

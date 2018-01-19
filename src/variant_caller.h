@@ -24,7 +24,7 @@ protected:
 	assembler as; 
 	genome ref;
 	genome_partition pt;
-	string part_file;
+	string in_file;
 
 public:
 
@@ -36,7 +36,7 @@ protected:
 
 public:
 	
-	variant_caller(const string &partition_file, const string &reference);
+	variant_caller(const string &input_file, const string &reference);
 	~variant_caller();
 
 };

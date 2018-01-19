@@ -15,8 +15,8 @@
 
 using namespace std;
 #define strequ(A,B) (strcmp(A.c_str(), B.c_str()) == 0)
-kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads) : 
-	variant_caller(partition_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), USE_BARCODES(barcodes), PRINT_READS(print_reads), PRINT_STATS(print_stats), MAX_READS_PER_PART( max_reads) {
+kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads) : 
+	variant_caller(input_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), USE_BARCODES(barcodes), PRINT_READS(print_reads), PRINT_STATS(print_stats), MAX_READS_PER_PART( max_reads) {
 
 	k = kmer_len;
 	num_kmer = (unsigned long long)pow(4,k);
@@ -222,10 +222,10 @@ pair<unsigned short,pair<unsigned short,unsigned short>> kmistrvar::compute_supp
 	return result;
 }
 
-vector<pair<pair<string, string>, int>> kmistrvar::correct_reads(vector<pair<pair<string, string>, int>> reads){
+vector<pair<string, string>> kmistrvar::correct_reads(vector<pair<string, string>> reads){
 
 	unordered_map<string, unordered_map<string, int>> consensus;
-	vector<pair<pair<string, string>, int>> corrected_reads;
+	vector<pair<string, string>> corrected_reads;
 	int max_count = 0;
 	int len = 0;
 	string c = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";  //quick and dirty fix TODO  CCAGCGCCT-TATCGTGCA_
@@ -233,12 +233,12 @@ vector<pair<pair<string, string>, int>> kmistrvar::correct_reads(vector<pair<pai
 	string max_seq = "";
 
 	for(auto & read : reads){
-		len = read.first.second.length() < 50 ? read.first.second.length() : 50;
-		if(read.first.second.substr(0,len) == c.substr(0,len) ||
-			read.first.second.substr(read.first.second.length()-len,len) == c.substr(0,len) ||
-			read.first.second.substr(0,len) == g.substr(0,len) ||
-			read.first.second.substr(read.first.second.length()-len,len) == g.substr(0,len))continue; 
-		consensus[read.first.first.substr((read.first.first.length()-20), 20)][read.first.second]++;
+		len = read.second.length() < 50 ? read.second.length() : 50;
+		if(read.second.substr(0,len) == c.substr(0,len) ||
+			read.second.substr(read.second.length()-len,len) == c.substr(0,len) ||
+			read.second.substr(0,len) == g.substr(0,len) ||
+			read.second.substr(read.second.length()-len,len) == g.substr(0,len))continue; 
+		consensus[read.first.substr((read.first.length()-20), 20)][read.second]++;
 	}
 
 	for(auto & barcode : consensus){
@@ -253,7 +253,7 @@ vector<pair<pair<string, string>, int>> kmistrvar::correct_reads(vector<pair<pai
 			}
 		}
 
-		corrected_reads.push_back({{barcode.first, max_seq}, 0});
+		corrected_reads.push_back({barcode.first, max_seq});
 	}
 
 	return corrected_reads;
@@ -745,15 +745,23 @@ cerr << "not_bnd_count " << not_bnd_count << endl;
 //======================================================
 
 
-void kmistrvar::run_kmistrvar(const string &range, const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int ref_flank)
+void kmistrvar::run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
-
 
 clock_t begin = clock();
 clock_t end;
 double elapsed_secs;
 
-	assemble(range, min_support, max_support, LOCAL_MODE, ref_flank);
+	extractor ext(in_file, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+
+if(PRINT_STATS){
+end = clock();
+elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+cerr << "FIRST PASS TIME: " << elapsed_secs << endl;
+cerr << endl;
+}
+
+	assemble(ext, min_support, max_support, LOCAL_MODE, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
 
 if(PRINT_STATS){
 end = clock();
@@ -788,7 +796,7 @@ cerr << endl;
 // Local Assembly and Contig Indexing Stage
 //======================================================
 
-void kmistrvar::assemble(const string &range, int min_support, int max_support, const bool LOCAL_MODE, int ref_flank)
+void kmistrvar::assemble(extractor& ext, int min_support, int max_support, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
 	
 	int contig_id = 0;
@@ -815,26 +823,29 @@ double support_count = 0;
 		}
 	}
 
+
 	//Assemble contigs and build kmer index
 	//=====================================
 	cerr << "Assembling contigs..." << endl;
 	while (1) {
 		
-		vector<pair<pair<string, string>, int>> p;
-
-		//Read in partition file
-		p = pt.read_partition(part_file, range, min_support, MAX_READS_PER_PART);
-
-		if (!p.size()) 
+		if(!ext.has_next_cluster())
 			break;
 
-		if(USE_BARCODES)p = correct_reads(p);
+		//Read in partition file
+		//p = pt.read_partition(part_file, range, min_support, MAX_READS_PER_PART);
+		extractor::cluster p = ext.get_next_cluster();
 
-		if (!p.size()) 
+		if (!p.reads.size()) 
+			continue;
+
+		if(USE_BARCODES)p.reads = correct_reads(p.reads);
+
+		if (!p.reads.size()) 
 			continue;
 
 		//Assemble contigs
-		contigs = as.assemble(p); 
+		contigs = as.assemble(p.reads); 
 
 //STATS
 if(PRINT_STATS){
@@ -865,7 +876,8 @@ if(PRINT_STATS){
 				tsl::sparse_map<int, vector<int>> kmer_location;
 				kmer_location.reserve(con.size());
 				kmer_locations.push_back(kmer_location);
-				cluster_info.push_back({ pt.get_start(), (find(chromos.begin(), chromos.end(), pt.get_reference()) - chromos.begin()) });
+				//cluster_info.push_back({ pt.get_start(), (find(chromos.begin(), chromos.end(), pt.get_reference()) - chromos.begin()) });
+				cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
 
 				if(PRINT_READS){
 					all_contigs.push_back(contig);
@@ -962,6 +974,8 @@ if(PRINT_STATS){
 			contig_mappings[rc][chr] = vector<vector<mapping>>(contig_id, vector<mapping>(1, {0, k, -1}));
 		}
 	}
+
+//	delete parser;
 
 //STATS
 if(PRINT_STATS){

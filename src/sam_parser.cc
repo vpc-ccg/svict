@@ -47,6 +47,11 @@ bool SAMParser::readNext ()
 	return false;
 }
 
+bool SAMParser::readNextSimple ()  
+{
+	return readNext ();
+}
+
 bool SAMParser::hasNext (void) 
 {
 	return !feof(input);

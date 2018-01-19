@@ -22,6 +22,7 @@ public:
 	virtual std::string head (void) = 0;
 	virtual Record next (void) = 0;
 	virtual bool readNext () = 0;
+	virtual bool readNextSimple() = 0;
 
 };
 
