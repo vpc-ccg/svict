@@ -47,7 +47,7 @@ bool SAMParser::readNext ()
 	return false;
 }
 
-bool SAMParser::readNextSimple ()  
+bool SAMParser::readNextDiscordant ()  
 {
 	return readNext ();
 }

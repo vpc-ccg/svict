@@ -529,6 +529,7 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 	int flag = 0;
 	bool has_supple = false;
 	uint32_t count = 0 ;
+
 	while ( parser->hasNext() )
 	{
 		const Record &rc = parser->next();
@@ -555,7 +556,6 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 				}
 				else
 				{
-					string token = "";
 					if ( 0x40 == (flag&0x40) )
 					{
 						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
@@ -570,8 +570,8 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 
 			}
 		}
-		count++; if (0 == count%100000){fprintf( stderr, ".");}
-		parser->readNextSimple();
+		count++; if (0 == count%1000000){fprintf( stderr, ".");}
+		parser->readNextDiscordant();
 	}
 	delete parser;
 	return 0;
@@ -693,44 +693,23 @@ extractor::cluster extractor::get_next_cluster()
 {
 
 	extractor::cluster next_cluster;
-	vector<pair<string, string>> reads;
 	
 	int max_c = 0, tmp_c = 0;
 	int count = 0;
 	
 	uint32_t flag;
-	uint32_t pos, pair_pos;
-	int32_t  tlen;
+	uint32_t pos;
 	int orphan_flag, oea_flag, chimera_flag;
 
 	char ref[1000];
-	uint32_t start_loc = 0;
-	uint32_t p_loc     = 0;
 	uint32_t num_read  = 0;
 	uint32_t num_mappings  = 0;
-	uint32_t base      = 0;
-	int      index     = 0;
 
 	read tmp;	
-	int s1 = 0, e1 = 0;
-	int match_l = 0, read_l = 0;
-	int t_s = 0, t_e = 0;
 	int t_loc;
-
-	int cluster_id = 1;
-	fpos_t cur_pos;
 	int p_start = 0, p_end = 0;
-	int cluster_flag = 1;
-	
-	vector< read > vec_read;
-	vec_read.reserve(max_num_read);
-
-	int num_supply = 0;
-	int fr_flag = 0, se_flag = 0; // existence for first and second mate in supply_dict
 	int add_read = 0 ;
-	//int reversed = 0, // 1 for rc, 0 for forward
-	//	mate = 0; 	  // 1 for first mate, 0 for second	
-	//int z = 0;
+
 	while(1){
 		if ( parser->hasNext() )
 		{
@@ -740,9 +719,6 @@ extractor::cluster extractor::get_next_cluster()
 			add_read   = 0;
 
 			flag     = rc.getMappingFlag();
-			pos      = rc.getLocation();
-
-			if(vec_read.empty())strncpy( ref,  rc.getChromosome(), 1000);
 
 			if ( flag < 256 ) // To-Do: include supplementary split-mapping as potential mapping locations
 			{
@@ -773,7 +749,9 @@ extractor::cluster extractor::get_next_cluster()
 			else if ( two_pass && ( 0x800 == (flag & 0x800) ) )
 			{		
 				// supply_dict does not always include both mate, so we need to check to prevent including empty reads
-				//
+				
+				pos      = rc.getLocation();
+
 				// insert the hard-clipped mate itself
 				add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);
 				if ( add_read )
@@ -784,8 +762,12 @@ extractor::cluster extractor::get_next_cluster()
 
 			if ( add_read )
 			{
-
-				vec_read.push_back( tmp );  
+ 
+				if(next_cluster.reads.empty()){
+					strncpy( ref,  rc.getChromosome(), 1000);
+					next_cluster.reads.reserve(max_num_read);
+				}
+				next_cluster.reads.push_back({tmp.name,tmp.seq});
 				num_read++; 
 				num_mappings += add_read;
 				p_end = t_loc;
@@ -793,13 +775,8 @@ extractor::cluster extractor::get_next_cluster()
 
 				if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read < num_read) )
 				{
-					if ( num_read )//&& cluster_flag )
+					if ( num_read )
 					{
-
-						for (auto &i: vec_read)
-							reads.push_back({i.name,i.seq});	
-
-						next_cluster.reads = reads;
 						next_cluster.start = p_start;
 						next_cluster.end = p_end;
 						next_cluster.ref = string(ref);
@@ -810,15 +787,14 @@ extractor::cluster extractor::get_next_cluster()
 					num_read    = 0;
 					num_mappings = 0;
 					strncpy( ref,  rc.getChromosome(), 1000);
-					parser->readNextSimple();
+					parser->readNextDiscordant();
 					break;
 				}
 			}
 			
-			parser->readNextSimple();
+			parser->readNextDiscordant();
 		}
 		else{
-			next_cluster.reads = reads; 
 			break;
 		}
 	}

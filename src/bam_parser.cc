@@ -231,102 +231,114 @@ bool BAMParser::readNext (void)
 	return true;
 }
 
-bool BAMParser::readNextSimple (void) 
+bool BAMParser::readNextDiscordant (void) 
 {
-	int32_t bsize, cc;
-	char *buf = &currentRecord.line[0];
-	char *line = buf;
-	if (gzread(input, &bsize, 4) != 4) 
-		return false;
 
-	//assert(bsize < MAXLEN);
-	if (bsize > dataSize)
-		data = (char*)realloc(data, dataSize = bsize + KB);
-	gzread(input, data, bsize);
+	bool disc_found = false;
 
-	int32_t *di = (int32_t*)data;
+	while(!disc_found && hasNext()){
 
-	int bin = di[2] >> 16;
-	int l_read_name = di[2] & 0xff;
-	int n_cigar_op = di[3] & 0xffff;
-	int l_seq = di[4];
+		int32_t bsize, cc;
+		char *buf = &currentRecord.line[0];
+		char *line = buf;
+		if (gzread(input, &bsize, 4) != 4) 
+			return false;
 
-	// rn
-	strncpy(buf, data + 8 * 4, l_read_name);
-	currentRecord.strFields[Record::RN] = buf - line;
-	buf += l_read_name;
+		//assert(bsize < MAXLEN);
+		if (bsize > dataSize)
+			data = (char*)realloc(data, dataSize = bsize + KB);
+		gzread(input, data, bsize);
 
-	// flag
- 	currentRecord.intFields[Record::MF] = di[3] >> 16;
+		int32_t *di = (int32_t*)data;
 
- 	// chr
- 	string chr = chromosomes[di[0]];
-	strncpy(buf, chr.c_str(), chr.size() + 1);
-	currentRecord.strFields[Record::CHR] = buf - line;
-	buf += chr.size() + 1;	 	
+		int bin = di[2] >> 16;
+		int l_read_name = di[2] & 0xff;
+		int n_cigar_op = di[3] & 0xffff;
+		int l_seq = di[4];
 
- 	// loc
- 	currentRecord.intFields[Record::LOC] = di[1] + 1;
- 	
- 	// cigar
- 	uint32_t *op = (uint32_t*)(data + 8 * 4 + l_read_name);
- 	cc = 0;
-	for (int i = 0; i < n_cigar_op; i++)
-		cc += sprintf(buf + cc, "%d%c", op[i] >> 4, "MIDNSHP=X"[op[i] & 0xf]);
-	if (n_cigar_op == 0)
-		buf[cc++] = '*';
-	n_cigar_op *= 4;
-	buf[cc++] = 0;
- 	currentRecord.strFields[Record::CIGAR] = buf - line;
-	buf += cc;
+		// rn
+		strncpy(buf, data + 8 * 4, l_read_name);
+		currentRecord.strFields[Record::RN] = buf - line;
+		buf += l_read_name;
 
- 	// p_chr
- 	string pe_chr = chromosomes[di[5]];
- 	if (pe_chr != "*" && pe_chr == chr)
- 		pe_chr = "=";
- 	strncpy(buf, pe_chr.c_str(), pe_chr.size() + 1);
-	currentRecord.strFields[Record::P_CHR] = buf - line;
-	buf += pe_chr.size() + 1;
+		// flag
+	 	currentRecord.intFields[Record::MF] = di[3] >> 16;
+	 	uint32_t flag = currentRecord.getMappingFlag();
 
-	// p_loc
- 	currentRecord.intFields[Record::P_LOC] = di[6] + 1;
+	 	if ( flag < 256 || (0x800 == (flag & 0x800)) ){
 
- 	// seq
- 	char *sq = data + 8 * 4 + l_read_name + n_cigar_op;
- 	cc = 0;
- 	for (int i = 0; i < l_seq; i++)
- 		buf[cc++] = "=ACMGRSVTWYHKDBN"[(sq[i / 2] >> ((1 - i % 2) * 4)) & 0xf];
- 	if (l_seq == 0)
- 		buf[cc++] = '*';
- 	buf[cc++] = 0;
- 	currentRecord.strFields[Record::SEQ] = buf - line;
-	buf += cc;
+		 	// chr
+		 	string chr = chromosomes[di[0]];
+			strncpy(buf, chr.c_str(), chr.size() + 1);
+			currentRecord.strFields[Record::CHR] = buf - line;
+			buf += chr.size() + 1;	 	
 
-	currentRecord.strFields[Record::OPT] = buf - line;
+		 	// loc
+		 	currentRecord.intFields[Record::LOC] = di[1] + 1;
+		 	
+		 	// cigar
+		 	uint32_t *op = (uint32_t*)(data + 8 * 4 + l_read_name);
+		 	cc = 0;
+			for (int i = 0; i < n_cigar_op; i++)
+				cc += sprintf(buf + cc, "%d%c", op[i] >> 4, "MIDNSHP=X"[op[i] & 0xf]);
+			if (n_cigar_op == 0)
+				buf[cc++] = '*';
+			n_cigar_op *= 4;
+			buf[cc++] = 0;
+		 	currentRecord.strFields[Record::CIGAR] = buf - line;
+			buf += cc;
 
- 	// optional data ...
- 	int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
- 	bool found = false;
- 	if (pos >= bsize)
- 		buf[0] = 0;
- 	else 
- 		currentRecord.strFields[Record::OPT]++; // avoid \t
-	while (pos < bsize) {
-		if(data[pos] == 'S' && data[pos+1] == 'A'){
-			*buf = '\t', buf++;
-			buf += sprintf(buf, "%c%c:", data[pos], data[pos+1]); 
-			found = true;
-			break;
+		 	// p_chr
+		 	string pe_chr = chromosomes[di[5]];
+		 	if (pe_chr != "*" && pe_chr == chr)
+		 		pe_chr = "=";
+		 	strncpy(buf, pe_chr.c_str(), pe_chr.size() + 1);
+			currentRecord.strFields[Record::P_CHR] = buf - line;
+			buf += pe_chr.size() + 1;
+
+			// p_loc
+		 	currentRecord.intFields[Record::P_LOC] = di[6] + 1;
+
+		 	// seq
+		 	char *sq = data + 8 * 4 + l_read_name + n_cigar_op;
+		 	cc = 0;
+		 	for (int i = 0; i < l_seq; i++)
+		 		buf[cc++] = "=ACMGRSVTWYHKDBN"[(sq[i / 2] >> ((1 - i % 2) * 4)) & 0xf];
+		 	if (l_seq == 0)
+		 		buf[cc++] = '*';
+		 	buf[cc++] = 0;
+		 	currentRecord.strFields[Record::SEQ] = buf - line;
+			buf += cc;
+
+			currentRecord.strFields[Record::OPT] = buf - line;
+
+		 	// optional data ...
+		 	int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
+		 	bool found = false;
+		 	if (pos >= bsize)
+		 		buf[0] = 0;
+		 	else 
+		 		currentRecord.strFields[Record::OPT]++; // avoid \t
+			while (pos < bsize) {
+				if(data[pos] == 'S' && data[pos+1] == 'A'){
+					*buf = '\t', buf++;
+					buf += sprintf(buf, "%c%c:", data[pos], data[pos+1]); 
+					found = true;
+					break;
+				}
+				else{
+					pos++;
+				}
+			}
+			if(!found)buf += sprintf(buf, "NO");
+
+			disc_found = true;
 		}
-		else{
-			pos++;
-		}
+
+		*buf = 0;
+		currentRecord.lineSize = buf - currentRecord.line;
+		currentRecord.lineLength = buf - currentRecord.line;
 	}
-	if(!found)buf += sprintf(buf, "NO");
-
-	*buf = 0;
-	currentRecord.lineSize = buf - currentRecord.line;
-	currentRecord.lineLength = buf - currentRecord.line;
 
 	return true;
 }

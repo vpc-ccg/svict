@@ -24,7 +24,7 @@ public:
 public:
 	std::string readComment (void);
 	bool readNext ();
-	bool readNextSimple ();
+	bool readNextDiscordant ();
 	bool hasNext (void);
 	size_t fpos (void);
 	size_t fsize (void);
