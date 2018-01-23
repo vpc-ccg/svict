@@ -19,6 +19,7 @@ private:
 	unordered_map<string, Record> map_oea;
 	unordered_map<string, Record> map_read;
 	unordered_map<string, Record> map_orphan;
+	int min_dist;
 	int max_dist;
 	int max_num_read;
 	double clip_ratio;
@@ -54,7 +55,7 @@ private:
 	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
 
 public:
-	extractor(string filename, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true );
+	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true );
 	~extractor();
 	extractor::cluster get_next_cluster();
 	bool has_next_cluster();

@@ -75,11 +75,11 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 
 /********************************************************************/
 void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const string &out_vcf,
-					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int max_reads, const bool LOCAL_MODE,
-					int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE,
+					int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
-	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads, print_stats, max_reads );
-	predictor.run_kmistrvar(out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads, print_stats);
+	predictor.run_kmistrvar(out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
 }
 
 /********************************************************************/
@@ -450,7 +450,9 @@ void printHELP()
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
 	LOG( "\t-m|--min_length:\tMin SV length (default 60).");
 	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
-	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster.\n\t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 10000).");
+	LOG( "\t-d|--min_dist:\tMin cluster distance (default 5).");
+	LOG( "\t-D|--max_dist:\tMax cluster distance (default 1000).");
+	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster.\n\t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 200).");
 	LOG( "\t-B|--both-mate:\tAdd both mate in the partition file (default: off).\n");
 
 
@@ -476,7 +478,7 @@ int main(int argc, char *argv[])
 			out_prefix = "out" ,
 			annotation = "" ,
 			unmapped   = "" ;
-	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, max_reads = 5000;
+	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, min_dist = 5, max_dist = 1000, max_reads = 200; 
 	bool barcodes = false, print_reads = false, print_stats = false;
 	bool both_mates = false, two_pass = true;
 	int sam_flag  = 0, 
@@ -503,6 +505,8 @@ int main(int argc, char *argv[])
 		{ "uncertainty", required_argument, 0, 'u' },
 		{ "min_length", required_argument, 0, 'm' },
 		{ "max_length", required_argument, 0, 'M' },
+		{ "min_dist", required_argument, 0, 'd' },
+		{ "max_dist", required_argument, 0, 'D' },
 		{ "max_reads", required_argument, 0, 'n' },
 		{ "unmapped", required_argument, 0, 'x' },
 		{ "express", no_argument, 0, 'z' },
@@ -510,7 +514,7 @@ int main(int argc, char *argv[])
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:n:x:zB", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:d:D:n:x:zB", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -574,6 +578,12 @@ int main(int argc, char *argv[])
 			case 'M':
 				M = atoi(optarg);
 				break;
+			case 'd':
+				min_dist = atoi(optarg);
+				break;
+			case 'D':
+				max_dist = atoi(optarg);
+				break;
 			case 'n':
 				max_reads = atoi(optarg);
 				break;
@@ -628,6 +638,10 @@ int main(int argc, char *argv[])
 		msg += "\tError: Min SV length should be <= max SV length\n";
 		pass =  0;
 	}
+	if ( min_dist > max_dist ){
+		msg += "\tError: Min cluster distance should be <= max cluster distance\n";
+		pass =  0;
+	}
 
 
 	
@@ -646,7 +660,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, (out_prefix + ".vcf"), k, a, s, S, u, m, M, max_reads, 0, threshold, max_reads, 0.99, both_mates, two_pass);
+	predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, min_dist, max_dist, max_reads, 0.99, both_mates, two_pass);
 
 	return 0;
 }

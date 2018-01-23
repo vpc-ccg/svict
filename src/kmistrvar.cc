@@ -15,8 +15,8 @@
 
 using namespace std;
 #define strequ(A,B) (strcmp(A.c_str(), B.c_str()) == 0)
-kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads) : 
-	variant_caller(input_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), USE_BARCODES(barcodes), PRINT_READS(print_reads), PRINT_STATS(print_stats), MAX_READS_PER_PART( max_reads) {
+kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats) : 
+	variant_caller(input_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), USE_BARCODES(barcodes), PRINT_READS(print_reads), PRINT_STATS(print_stats) {
 
 	k = kmer_len;
 	num_kmer = (unsigned long long)pow(4,k);
@@ -745,14 +745,14 @@ cerr << "not_bnd_count " << not_bnd_count << endl;
 //======================================================
 
 
-void kmistrvar::run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+void kmistrvar::run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
 
 clock_t begin = clock();
 clock_t end;
 double elapsed_secs;
 
-	extractor ext(in_file, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
 
 if(PRINT_STATS){
 end = clock();
@@ -833,8 +833,6 @@ double support_count = 0;
 		if(!ext.has_next_cluster())
 			break;
 
-		//Read in partition file
-		//p = pt.read_partition(part_file, range, min_support, MAX_READS_PER_PART);
 		extractor::cluster p = ext.get_next_cluster();
 
 		if (!p.reads.size()) 

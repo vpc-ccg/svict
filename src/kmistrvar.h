@@ -23,7 +23,6 @@ class kmistrvar : public variant_caller
 {
 private:
 
-	const int MAX_READS_PER_PART = 10000;//2000 losses 1 Del, but -10min on WES;
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
@@ -145,8 +144,8 @@ private:
 	
 public:
 	
-	kmistrvar(int kmer_len, int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const int max_reads);
+	kmistrvar(int kmer_len, int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats);
 	~kmistrvar();
-	void run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true);
+	void run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true);
 };
 #endif

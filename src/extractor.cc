@@ -7,8 +7,8 @@
 using namespace std;
 
 /***************************************************************/
-extractor::extractor( string filename, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass ):
-	max_dist(max_dist), max_num_read(max_num_read), clip_ratio(clip_ratio), both_mates(both_mates), two_pass(two_pass)
+extractor::extractor( string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass ):
+	min_dist(min_dist), max_dist(max_dist), max_num_read(max_num_read), clip_ratio(clip_ratio), both_mates(both_mates), two_pass(two_pass)
 {
 	int min_length = -1;
 	FILE *fi = fopen(filename.c_str(), "rb");
@@ -707,7 +707,7 @@ extractor::cluster extractor::get_next_cluster()
 
 	read tmp;	
 	int t_loc;
-	int p_start = 0, p_end = 0;
+	int p_start = 0, p_end = 0, p_len = 0;
 	int add_read = 0 ;
 
 	while(1){
@@ -770,11 +770,12 @@ extractor::cluster extractor::get_next_cluster()
 				next_cluster.reads.push_back({tmp.name,tmp.seq});
 				num_read++; 
 				num_mappings += add_read;
-				p_end = t_loc;
-				if ( !p_start ){ p_start = t_loc;}
 
-				if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read < num_read) )
-				{
+				p_end = (t_loc > p_end) ? t_loc : p_end;
+				if ( !p_start ){p_start = t_loc;}
+
+				if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read < num_read))
+				{	
 					if ( num_read )
 					{
 						next_cluster.start = p_start;
@@ -782,13 +783,21 @@ extractor::cluster extractor::get_next_cluster()
 						next_cluster.ref = string(ref);
 					}
 
-					p_start     = 0;
-					p_end       = 0;
 					num_read    = 0;
 					num_mappings = 0;
-					strncpy( ref,  rc.getChromosome(), 1000);
+					p_len = p_end - p_start;
+					p_start     = 0;
+					p_end       = 0;
 					parser->readNextDiscordant();
-					break;
+
+					if(p_len < min_dist){
+						vector<pair<string, string>>().swap(next_cluster.reads);
+						strncpy( ref,  rc.getChromosome(), 1000);
+						continue;
+					}
+					else{
+						break;
+					}
 				}
 			}
 			
