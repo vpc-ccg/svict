@@ -23,7 +23,7 @@ kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &input_fil
 	kmer_mask = (unsigned long long)(num_kmer-1);
 	num_intervals = 1;
 	u_ids = 0;
-	contig_kmers_index = new int[num_kmer]; 
+	
 	if(USE_ANNO) ensembl_Reader(gtf.c_str(), iso_gene_map, gene_sorted_map );
 
 	contig_mappings = new vector<vector<mapping>>*[2];
@@ -66,10 +66,6 @@ kmistrvar::~kmistrvar(){
 }
 
 void kmistrvar::init(){
-
-	for(int i = 0; i < num_kmer; i++){
-		contig_kmers_index[i] = 0;
-	} 
 
 	for(int sv=0; sv < sv_types.size(); sv++){
 		for(int chr=0; chr < chromos.size(); chr++){
@@ -752,22 +748,22 @@ clock_t begin = clock();
 clock_t end;
 double elapsed_secs;
 
-	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
-
-if(PRINT_STATS){
-end = clock();
-elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-cerr << "FIRST PASS TIME: " << elapsed_secs << endl;
-cerr << endl;
-begin = clock();
-}
-
-	assemble(ext, min_support, max_support, LOCAL_MODE, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+	assemble(min_support, max_support, LOCAL_MODE, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
 
 if(PRINT_STATS){
 end = clock();
 elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
 cerr << "ASSEMBLY TIME: " << elapsed_secs << endl;
+cerr << endl;
+begin = clock();
+}
+
+	index();
+
+if(PRINT_STATS){
+end = clock();
+elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+cerr << "INDEX TIME: " << elapsed_secs << endl;
 cerr << endl;
 begin = clock();
 }
@@ -792,30 +788,22 @@ cerr << endl;
 
 }
 
-
 //======================================================
-// Local Assembly and Contig Indexing Stage
+// Local Assembly Stage
 //======================================================
 
-void kmistrvar::assemble(extractor& ext, int min_support, int max_support, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
 	
-	int contig_id = 0;
-	int cur_test = 0;
-	int max_hits = 0;
-	int loc, i, j, x, ps, pe;
-	int MAX_PART_SIZE = 10000;
-	unsigned long long index = 0;
-	vector<int> contig_list;
 	vector<contig> contigs;
-	vector<contig> tmp_contigs;
-	contig_kmers.push_back(contig_list);
+	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
 
 //STATS
 double part_count = 0;
 double contig_count1 = 0;
 double contig_count2 = 0;
 double support_count = 0;
+int read_count = 0;
 
 	// If local mode enabled, use regions around contigs. Otherwise, add all chromosomes as regions
 	if(!LOCAL_MODE){  
@@ -824,14 +812,14 @@ double support_count = 0;
 		}
 	}
 
-
 	//Assemble contigs and build kmer index
 	//=====================================
 	cerr << "Assembling contigs..." << endl;
 	while (1) {
 		
-		if(!ext.has_next_cluster())
+		if(!ext.has_next_cluster()){
 			break;
+		}
 
 		extractor::cluster p = ext.get_next_cluster();
 
@@ -848,11 +836,10 @@ double support_count = 0;
 
 //STATS
 if(PRINT_STATS){
+	read_count += p.reads.size();
 	part_count++;
 	contig_count1 += contigs.size(); 	
 }
-
-
 		
 		//TODO: Contig merging
 		for (auto &contig: contigs){ 
@@ -868,14 +855,8 @@ if(PRINT_STATS){
 		//cout << contig.data << endl;
 	}
 }
-				
 				//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
-				
-				string& con = contig.data;
-				tsl::sparse_map<int, vector<int>> kmer_location;
-				kmer_location.reserve(con.size());
-				kmer_locations.push_back(kmer_location);
-				//cluster_info.push_back({ pt.get_start(), (find(chromos.begin(), chromos.end(), pt.get_reference()) - chromos.begin()) });
+
 				cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
 
 				if(PRINT_READS){
@@ -884,79 +865,6 @@ if(PRINT_STATS){
 				else{
 					all_compressed_contigs.push_back(compress(contig));
 				}
-
-				i = 0, j = 0, x = 0;
-
-				// Per chromosome repeat flag for each contig
-				for(int rc=0; rc < 2; rc++){
-					for(int chr=0; chr < 25; chr++){
-						last_intervals[rc][chr].push_back((last_interval){ 0, k, 0});
-					}
-				}
-
-				// k-1 kmer for first round
-				for(j = 0; j < k-1; j++){    
-					if(j > 0 && con[i+j] == 'N'){
-						i += (j+1);
-						j = -1;
-						index = 0;
-						continue;
-					}
-					index <<= 2;
-					index |= ((con[i+j] & MASK) >> 1);
-				}
-
-				// Skip N nucleotides
-				for (i; i < con.length()-k+1; i++){
-
-					if(con[i+k-1] == 'N'){
-						i+=k;
-						while(con[i] == 'N'){
-							i++;
-						}
-
-						index = 0;
-
-						for(x = 0; x < k-1; x++){
-							if(con[i+x] == 'N'){
-								i += (x+1);
-								x = -1;
-								index = 0;
-								continue;
-							}
-							index <<= 2;
-							index |= ((con[i+x] & MASK) >> 1);
-						}
-						i--;
-						continue;
-					}
-
-					// Compute next kmer via bit shift
-					index <<= 2;
-					index |= ((con[i+k-1] & MASK) >> 1); 
-					index &= kmer_mask;
-
-					int& cur_index = contig_kmers_index[index];
-
-					// Add to index
-					if(!cur_index){
-						contig_kmers_index[index] = contig_kmers.size();
-
-						vector<int> contig_list;
-						contig_list.reserve(1);
-
-						contig_list.push_back(contig_id);
-						contig_kmers.push_back(contig_list);
-					}
-					else{
-						if(contig_kmers[cur_index].back() != contig_id){
-							contig_kmers[cur_index].push_back(contig_id);
-						}
-					}
-					kmer_locations[contig_id][cur_index].push_back(i); 
-					
-				}
-				contig_id++;
 			}
 		}
 		vector<contig>().swap(contigs);
@@ -967,6 +875,122 @@ if(PRINT_STATS){
 		exit(1);
 	}
 
+if(PRINT_STATS){
+	cerr << "Read Count: " << read_count << endl;
+	cerr << "Partition Count: " << part_count << endl;
+	cerr << "Contigs: " << all_contigs.size() << " " << all_compressed_contigs.size() << endl;
+	cerr << "Average Num Contigs Pre-Filter: " << (contig_count1/part_count) << endl;
+	cerr << "Average Num Contigs Post-Filter: " << (contig_count2/part_count) << endl;
+	cerr << "Average Contig Support: " << (support_count/contig_count2) << endl;
+}
+}
+
+
+//====================================================== 
+// Contig Indexing Stage
+//======================================================  
+													
+void kmistrvar::index()
+{
+	
+	int contig_id = 0;
+	int max_hits = 0;
+	int i, j, x;
+	unsigned long long index = 0;
+	vector<int> contig_list;
+	contig_kmers.push_back(contig_list);
+
+	//Assemble contigs and build kmer index
+	//=====================================
+	cerr << "Indexing contigs..." << endl;
+
+	contig_kmers_index = new int[num_kmer]; //Dangerous thing to do, think of different solution
+
+	for(int i = 0; i < num_kmer; i++){
+		contig_kmers_index[i] = 0;
+	} 
+	
+	//TODO: Contig merging
+	for (contig_id = 0; contig_id < max(all_contigs.size(), all_compressed_contigs.size()); contig_id++){
+		
+		string con = PRINT_READS ? all_contigs[contig_id].data :  con_string(contig_id, 0, all_compressed_contigs[contig_id].data.size()/2);
+		tsl::sparse_map<int, vector<int>> kmer_location;
+		kmer_location.reserve(con.size());
+		kmer_locations.push_back(kmer_location);
+
+		i = 0, j = 0, x = 0;
+
+		// Per chromosome repeat flag for each contig
+		for(int rc=0; rc < 2; rc++){
+			for(int chr=0; chr < 25; chr++){
+				last_intervals[rc][chr].push_back((last_interval){ 0, k, 0});
+			}
+		}
+
+		// k-1 kmer for first round
+		for(j = 0; j < k-1; j++){    
+			if(j > 0 && con[i+j] == 'N'){
+				i += (j+1);
+				j = -1;
+				index = 0;
+				continue;
+			}
+			index <<= 2;
+			index |= ((con[i+j] & MASK) >> 1);
+		}
+
+		// Skip N nucleotides
+		for (i; i < con.length()-k+1; i++){
+
+			if(con[i+k-1] == 'N'){
+				i+=k;
+				while(con[i] == 'N'){
+					i++;
+				}
+
+				index = 0;
+
+				for(x = 0; x < k-1; x++){
+					if(con[i+x] == 'N'){
+						i += (x+1);
+						x = -1;
+						index = 0;
+						continue;
+					}
+					index <<= 2;
+					index |= ((con[i+x] & MASK) >> 1);
+				}
+				i--;
+				continue;
+			}
+
+			// Compute next kmer via bit shift
+			index <<= 2;
+			index |= ((con[i+k-1] & MASK) >> 1); 
+			index &= kmer_mask;
+
+			int& cur_index = contig_kmers_index[index];
+
+			// Add to index
+			if(!cur_index){
+				contig_kmers_index[index] = contig_kmers.size();
+
+				vector<int> contig_list;
+				contig_list.reserve(1);
+
+				contig_list.push_back(contig_id);
+				contig_kmers.push_back(contig_list);
+			}
+			else{
+				if(contig_kmers[cur_index].back() != contig_id){
+					contig_kmers[cur_index].push_back(contig_id);
+				}
+			}
+			kmer_locations[contig_id][cur_index].push_back(i); 
+			
+		}
+	}
+
 	// Initialize mappings vector based on number of contigs
 	for(int rc=0; rc <= 1; rc++){
 		for(int chr=0; chr < 25; chr++){
@@ -974,15 +998,8 @@ if(PRINT_STATS){
 		}
 	}
 
-//	delete parser;
-
 //STATS
 if(PRINT_STATS){
-	cerr << "Partition Count: " << part_count << endl;
-	cerr << "Contigs: " << all_contigs.size() << " " << all_compressed_contigs.size() << endl;
-	cerr << "Average Num Contigs Pre-Filter: " << (contig_count1/part_count) << endl;
-	cerr << "Average Num Contigs Post-Filter: " << (contig_count2/part_count) << endl;
-	cerr << "Average Contig Support: " << (support_count/contig_count2) << endl;
 	cerr << "Number of unique kmers: " << contig_kmers.size() << endl;
 	cerr << "Max hits: " << max_hits << endl;
 }	

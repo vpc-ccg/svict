@@ -59,7 +59,7 @@ public:
 	~extractor();
 	extractor::cluster get_next_cluster();
 	bool has_next_cluster();
-
+	void clear_maps();
 };
 
 

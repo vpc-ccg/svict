@@ -136,7 +136,8 @@ private:
 	void print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
-	void assemble(extractor &ext, int min_support, int max_support, const bool LOCAL_MODE, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass);
+	void assemble(int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass);
+	void index();
 	void generate_intervals(const string &out_vcf, const bool LOCAL_MODE);
 	void predict_variants(const string &out_vcf, int uncertainty, int min_length, int max_length);
 	bool bfs(const int DEPTH, int** rGraph, int s, int t, int parent[]);

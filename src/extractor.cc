@@ -559,12 +559,10 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 					if ( 0x40 == (flag&0x40) )
 					{
 						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
-
 					}
 					else
 					{
 						supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
-
 					}
 				}
 
@@ -701,7 +699,7 @@ extractor::cluster extractor::get_next_cluster()
 	uint32_t pos;
 	int orphan_flag, oea_flag, chimera_flag;
 
-	char ref[1000];
+	char ref[50];
 	uint32_t num_read  = 0;
 	uint32_t num_mappings  = 0;
 
@@ -764,7 +762,7 @@ extractor::cluster extractor::get_next_cluster()
 			{
  
 				if(next_cluster.reads.empty()){
-					strncpy( ref,  rc.getChromosome(), 1000);
+					strncpy( ref,  rc.getChromosome(), 50);
 					next_cluster.reads.reserve(max_num_read);
 				}
 				next_cluster.reads.push_back({tmp.name,tmp.seq});
@@ -774,7 +772,7 @@ extractor::cluster extractor::get_next_cluster()
 				p_end = (t_loc > p_end) ? t_loc : p_end;
 				if ( !p_start ){p_start = t_loc;}
 
-				if ( strncmp(ref, rc.getChromosome(), 1000 ) || ( max_dist < t_loc - p_start)  || ( max_num_read < num_read))
+				if ( strncmp(ref, rc.getChromosome(), 50 ) || ( max_dist < t_loc - p_start)  || ( max_num_read < num_read))
 				{	
 					if ( num_read )
 					{
@@ -792,7 +790,7 @@ extractor::cluster extractor::get_next_cluster()
 
 					if(p_len < min_dist){
 						vector<pair<string, string>>().swap(next_cluster.reads);
-						strncpy( ref,  rc.getChromosome(), 1000);
+						strncpy( ref,  rc.getChromosome(), 50);
 						continue;
 					}
 					else{
@@ -815,4 +813,13 @@ extractor::cluster extractor::get_next_cluster()
 bool extractor::has_next_cluster(){
 
 	return parser->hasNext();
+}
+
+void extractor::clear_maps(){
+
+	supply_dict.clear();
+	map_oea.clear();
+	map_read.clear();
+	map_orphan.clear();
+
 }
