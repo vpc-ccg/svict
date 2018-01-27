@@ -698,8 +698,8 @@ not_bnd_count++;
 						}
 
 						if(PRINT_READS){
-							cluster_ids += cluster_ids_pair;
-							contig_ids += contig_ids_pair;
+							cluster_ids += "," + cluster_ids_pair;
+							contig_ids += "," + contig_ids_pair;
 						}
 						else{
 							cluster_ids = to_string(stoi(cluster_ids) + stoi(cluster_ids_pair));
