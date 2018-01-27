@@ -757,7 +757,7 @@ cerr << "ASSEMBLY TIME: " << elapsed_secs << endl;
 cerr << endl;
 begin = clock();
 }
-
+	exit(0);
 	index();
 
 if(PRINT_STATS){
@@ -792,7 +792,7 @@ cerr << endl;
 // Local Assembly Stage
 //======================================================
 
-void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+void kmistrvar::assemble0( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
 	
 	vector<contig> contigs;
@@ -885,7 +885,111 @@ if(PRINT_STATS){
 }
 }
 
+// Two Stage with Extreme Memory
+/***************************************************************/
+void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+{
+	vector< extractor::cluster > buffer_contigs; 
+	buffer_contigs.reserve(1024);
 
+	vector<contig> contigs;
+	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+
+//STATS
+double part_count = 0;
+double contig_count1 = 0;
+double contig_count2 = 0;
+double support_count = 0;
+int read_count = 0;
+
+	// If local mode enabled, use regions around contigs. Otherwise, add all chromosomes as regions
+	if(!LOCAL_MODE){  
+		for(char chr=0; chr < chromos.size(); chr++){//string & chr : chromos){
+			regions.push_back({chr,{1, 300000000}});  //WARNING: This will not work with all reference files. Same with old version. 
+		}
+	}
+
+	//Assemble contigs and build kmer index
+	//=====================================
+	cerr << "Assembling contigs..." << endl;
+	while (1) {
+		
+		if(!ext.has_next_cluster()){
+			break;
+		}
+
+		extractor::cluster p = ext.get_next_cluster();
+
+		if (!p.reads.size()) 
+			continue;
+
+		if(USE_BARCODES)p.reads = correct_reads(p.reads);
+
+		if (!p.reads.size()) 
+			continue;
+
+		if ( two_pass && p.sup)
+		{
+			fprintf( stderr, "BUFFER %d\n", p.reads.size() );
+			buffer_contigs.push_back( p );
+			continue;
+		}
+		fprintf( stderr, "MEH %d\n", p.reads.size() );
+		//Assemble contigs
+		contigs = as.assemble(p.reads); 
+
+//STATS
+if(PRINT_STATS){
+	read_count += p.reads.size();
+	part_count++;
+	contig_count1 += contigs.size(); 	
+}
+		
+		//TODO: Contig merging
+		for (auto &contig: contigs){ 
+			if (contig.support() >= min_support && contig.support() <= max_support) { //no loss of sensitivity! 
+
+//STATS
+if(PRINT_STATS){
+	contig_count2++; 
+	support_count += contig.support();	
+
+	if(pt.get_start() == 55180921){
+		//cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
+		//cout << contig.data << endl;
+	}
+}
+				//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
+
+				cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
+
+				if(PRINT_READS){
+					all_contigs.push_back(contig);
+				}
+				else{
+					all_compressed_contigs.push_back(compress(contig));
+				}
+			}
+		}
+		vector<contig>().swap(contigs);
+	}
+
+	fprintf( stderr, " Total %lu clusters are buffered\n", buffer_contigs.size() );
+
+	if(all_contigs.empty() && all_compressed_contigs.empty()){
+		cerr << "No contigs could be assembled. Exiting..." << endl;
+		exit(1);
+	}
+
+if(PRINT_STATS){
+	cerr << "Read Count: " << read_count << endl;
+	cerr << "Partition Count: " << part_count << endl;
+	cerr << "Contigs: " << all_contigs.size() << " " << all_compressed_contigs.size() << endl;
+	cerr << "Average Num Contigs Pre-Filter: " << (contig_count1/part_count) << endl;
+	cerr << "Average Num Contigs Post-Filter: " << (contig_count2/part_count) << endl;
+	cerr << "Average Contig Support: " << (support_count/contig_count2) << endl;
+}
+}
 //====================================================== 
 // Contig Indexing Stage
 //======================================================  

@@ -21,11 +21,12 @@ extractor::extractor( string filename, int min_dist, int max_dist, int max_num_r
 	if (magic[0] == char(0x1f) && magic[1] == char(0x8b)) 
 		ftype = 0;
 
-	if ( two_pass )
-	{
-		scan_supply_mappings( filename, ftype);
-		ERROR("\n%lu supplementary mappings are collected\n", supply_dict.size() );
-	}
+	//if ( two_pass )
+	//{
+	//	scan_supply_mappings( filename, ftype);
+	//	ERROR("\n%lu supplementary mappings are collected\n", supply_dict.size() );
+	//}
+	//exit(0);
 
 	if ( !ftype )
 		parser = new BAMParser(filename);
@@ -126,9 +127,40 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 	if (0>match_l){match_l=0;}
 	return 0;
 }
+/****************************************************************/
+// SA:rname ,pos ,strand ,CIGAR ,mapQ ,NM
+// SA:Z:Y,13414724,-,55M130S,60,0;
+int extractor::parse_supply( const char *attr, char *ref, int &loc, int &nm )
+{
+       int flag = 0;
+	   char *misc=(char*)malloc(1024);
+	   char *buf =(char*)malloc(1024);
+	   int ret = 0;
+	   int offset = 0;
+	   char c;
+       while( *attr )
+       {
+	   		ret = sscanf(attr, "%s%n", misc, &offset);
+			if ( !strncmp( "SA",  misc, 2) )
+			{
+				//fprintf(stderr, "%s\n", misc);
+				ret = sscanf( misc+5, "%[^\,],%d,%c,%[^\,],%[^\,],%d", ref, &loc, &c, buf, buf, &nm); 
+				//fprintf(stderr, "%d: %s %d %d\n", ret, ref, loc, nm);
+				flag = 1;
+				break;
+			}
+			attr += offset;
+       }
+	   free(misc);
+	   free(buf);
+       return flag;
+}
+/****************************************************************/
+// SA:rname ,pos ,strand ,CIGAR ,mapQ ,NM
 int extractor::parse_sa( const char *attr )
 {
        int flag = 0;
+
        while( *attr )
        {
                if ('S' == *attr )
@@ -153,6 +185,7 @@ int extractor::parse_sa( const char *attr )
        return flag;
 }
 
+/****************************************************************/
 bool extractor::has_supply_mapping( const char *attr )
 {
        return ('S' == *attr );
@@ -359,30 +392,30 @@ int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos, bool both
 {
 	unordered_map<string, Record>::iterator it;
 	it = map_oea.find( rc.getReadName() );
-	string seq = "";
-	int flag   = 0, 
-		u_flag = 0,
-		reversed = 0; // if the unmapped end is reversed or not
+	string seq 	  = "";
+	int flag   	  = 0, 
+		u_flag 	  = 0,
+		reversed  = 0; // if the unmapped end is reversed or not
 	anchor_pos    = 0;
 	int mate_flag = 0; // 0 for using rc in parition, 1 for using rc2
 	if ( it != map_oea.end() )	
 	{
 		if ( (0x4 == ( 0x4 & rc.getMappingFlag() ) ) )
-		{
+		{	// it anchor and rc unmapped
 			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
 			//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
-			flag = it->second.getMappingFlag();
-			u_flag = rc.getMappingFlag();
+			flag     = it->second.getMappingFlag();
+			u_flag   = rc.getMappingFlag();
 		}
 		else // decide position
 		{
-			reversed = ((it->second.getMappingFlag()  & 0x10) == 0x10);
-			flag = rc.getMappingFlag();
-			u_flag = it->second.getMappingFlag();
+			reversed  = ((it->second.getMappingFlag()  & 0x10) == 0x10);
+			flag      = rc.getMappingFlag();
+			u_flag    = it->second.getMappingFlag();
 			mate_flag = 1;
 		}
 			
-		anchor_pos = rc.getLocation(); 
+		anchor_pos = rc.getLocation(); // both side should take the same pos for OEA
 		if (flag & 0x10)
 		{ // anchor reversed, mate positive
 			if ( mate_flag )
@@ -529,7 +562,7 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 	int flag = 0;
 	bool has_supple = false;
 	uint32_t count = 0 ;
-
+	int t1 =0, t2 = 0;
 	while ( parser->hasNext() )
 	{
 		const Record &rc = parser->next();
@@ -539,7 +572,6 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 		if ( flag < 256 )
 		{
 			has_supple = has_supply_mapping( rc.getOptional() );// parse SA
-			//has_supple = parse_sa( rc.getOptional() );
 			if ( has_supple )
 			{
 				auto it    = supply_dict.find( rc.getReadName() );
@@ -569,15 +601,57 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 			}
 		}
 		count++; if (0 == count%1000000){fprintf( stderr, ".");}
-		parser->readNextDiscordant();
+		//parser->readNextDiscordant();
+		parser->readNext();
 	}
 	delete parser;
 	return 0;
 }
 
 /****************************************************************/
+int extractor::check_supply_mappings( const Record &rc )
+{
+	int flag = 0;
+	bool has_supple = false;
+	uint32_t count = 0 ;
+	flag     = rc.getMappingFlag();
+	if ( flag < 256 )
+	{
+		has_supple = parse_sa( rc.getOptional() );// parse SA
+		if ( has_supple )
+		{
+			auto it    = supply_dict.find( rc.getReadName() );
+			if ( it != supply_dict.end() )
+			{
+				if ( 0x40 == (flag&0x40) )
+				{
+					supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+				}
+				else
+				{
+					supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+				}
+			}
+			else
+			{
+				if ( 0x40 == (flag&0x40) )
+				{
+					supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+				}
+				else
+				{
+					supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+				}
+			}
+
+		}
+	}
+	return 0;
+}
+/****************************************************************/
 // return the entry obtained in the final string
 int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp)
+//int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp )
 {
 	int num = 0 ;
 	auto it    = supply_dict.find( readname );
@@ -707,6 +781,10 @@ extractor::cluster extractor::get_next_cluster()
 	int t_loc;
 	int p_start = 0, p_end = 0, p_len = 0;
 	int add_read = 0 ;
+	int has_supply  = 0; // has sup mappings or not;	buffer in cluster for two-stage 
+	
+	char sa_ref[50];
+	int  sa_pos = 0, sa_nm = 0;
 
 	while(1){
 		if ( parser->hasNext() )
@@ -716,9 +794,10 @@ extractor::cluster extractor::get_next_cluster()
 
 			add_read   = 0;
 
+
 			flag     = rc.getMappingFlag();
 
-			if ( flag < 256 ) // To-Do: include supplementary split-mapping as potential mapping locations
+			if ( flag < 256 ) 
 			{
 				orphan_flag  = (  (flag & 0xc) == 0xc); 
 				oea_flag     = ( ((flag & 0xc) == 0x4) || ((flag & 0xc) == 0x8) );
@@ -726,6 +805,9 @@ extractor::cluster extractor::get_next_cluster()
 
 				if ( !orphan_flag and !chimera_flag )
 				{
+					// todo: check SA for two pass mode
+					check_supply_mappings( rc );
+					//
 					t_loc = 0; 
 					if ( oea_flag )
 					{
@@ -744,17 +826,27 @@ extractor::cluster extractor::get_next_cluster()
 
 				}
 			}
-			else if ( two_pass && ( 0x800 == (flag & 0x800) ) )
+			//else if ( two_pass && ( 0x800 == (flag & 0x800) ) )
+			else if ( 0x800 == (flag & 0x800) )
 			{		
 				// supply_dict does not always include both mate, so we need to check to prevent including empty reads
 				
 				pos      = rc.getLocation();
-
+				parse_supply( rc.getOptional(), sa_ref, sa_pos, sa_nm );
 				// insert the hard-clipped mate itself
-				add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);
+				//add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);
+				if ( ( sa_ref <= rc.getChromosome() ) && ( sa_pos <= pos) )
+				{	add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);	}
+				
 				if ( add_read )
 				{ 
 					t_loc = pos;
+				}
+				else if ( two_pass )
+				{
+
+					has_supply = 1;
+					fprintf(stderr, "%d\n", has_supply);
 				}
 			}
 
@@ -779,6 +871,7 @@ extractor::cluster extractor::get_next_cluster()
 						next_cluster.start = p_start;
 						next_cluster.end = p_end;
 						next_cluster.ref = string(ref);
+						next_cluster.sup  = has_supply;
 					}
 
 					num_read    = 0;
@@ -786,7 +879,7 @@ extractor::cluster extractor::get_next_cluster()
 					p_len = p_end - p_start;
 					p_start     = 0;
 					p_end       = 0;
-					parser->readNextDiscordant();
+					parser->readNext();
 
 					if(p_len < min_dist){
 						vector<pair<string, string>>().swap(next_cluster.reads);
@@ -794,14 +887,17 @@ extractor::cluster extractor::get_next_cluster()
 						continue;
 					}
 					else{
+						has_supply = 0;
 						break;
 					}
 				}
 			}
 			
-			parser->readNextDiscordant();
+			//parser->readNextDiscordant();
+			parser->readNext();
 		}
 		else{
+			has_supply = 0;
 			break;
 		}
 	}

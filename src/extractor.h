@@ -38,10 +38,12 @@ public:
 		int start;
 		int end;
 		string ref;
+		int sup;
 	};
 
 private:
 	int md_length( char *md);
+	int parse_supply( const char *attr, char *rname, int &loc, int &nm );
 	int parse_sc( const char *cigar, int &match_l, int &read_l );
 	int get_endpoint( const uint32_t pos, const uint32_t pair_pos, const int match_l, const int tlen, int &t_s, int &t_e );
 	int process_orphan( const Record &rc, FILE *forphan, FILE *f_int, int ftype);
@@ -52,7 +54,9 @@ private:
 	int parse_sa( const char *attr );
 	bool has_supply_mapping( const char *attr );
 	int scan_supply_mappings( const string filename, int ftype );
+	int check_supply_mappings( const Record &rc );
 	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
+	//int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp, const char *ref_name, const int sa_pos);
 
 public:
 	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true );
