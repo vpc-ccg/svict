@@ -928,8 +928,8 @@ int read_count = 0;
 		if (!p.reads.size()) 
 			continue;
 
-		//if ( two_pass && p.sup)
-		if ( 1)
+		if ( two_pass && p.sup)
+		//if ( 1)
 		{
 			//fprintf( stderr, "BUFFER %d\n", p.reads.size() );
 			buffer_cluster.push_back( p );
@@ -992,7 +992,7 @@ if(PRINT_STATS){
 			if (add_read)
 				buffer_cluster[i].reads.push_back( {tmp.name, tmp.seq } );
 		}
-		fprintf( stderr, "cluster %d has %d readss\n", i, buffer_cluster[i].reads.size() );
+		//fprintf( stderr, "cluster %d has %d readss\n", i, buffer_cluster[i].reads.size() );
 		contigs = as.assemble(buffer_cluster[i].reads); 
 		for ( auto &contig: contigs)
 		{
@@ -1028,7 +1028,7 @@ if(PRINT_STATS){
 		cerr << "No contigs could be assembled. Exiting..." << endl;
 		exit(1);
 	}
-	exit(0);
+	//exit(0);
 if(PRINT_STATS){
 	cerr << "Read Count: " << read_count << endl;
 	cerr << "Partition Count: " << part_count << endl;

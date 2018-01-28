@@ -836,7 +836,7 @@ extractor::cluster extractor::get_next_cluster()
 				// supply_dict does not always include both mate, so we need to check to prevent including empty reads
 				
 				pos      = rc.getLocation();
-				parse_supply( rc.getOptional(), sa_ref, sa_pos, sa_nm );
+				//parse_supply( rc.getOptional(), sa_ref, sa_pos, sa_nm );
 				// insert the hard-clipped mate itself
 				//add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);
 				if ( ( sa_ref <= rc.getChromosome() ) && ( sa_pos <= pos) )
@@ -853,6 +853,9 @@ extractor::cluster extractor::get_next_cluster()
 					tmp_sa.name =  string( rc.getReadName() );
 					tmp_sa.flag = flag;
 					tmp_sa.pos = pos;
+					if(next_cluster.sa_reads.empty()){
+						next_cluster.sa_reads.reserve(1024);
+					}
 					next_cluster.sa_reads.push_back( tmp_sa );
 					num_read++; 
 					has_supply = 1;
@@ -868,6 +871,7 @@ extractor::cluster extractor::get_next_cluster()
 				if(next_cluster.reads.empty()){
 					strncpy( ref,  rc.getChromosome(), 50);
 					next_cluster.reads.reserve(max_num_read);
+					//next_cluster.sa_reads.reserve(1024);
 				}
 				next_cluster.reads.push_back({tmp.name,tmp.seq});
 				num_read++; 
@@ -895,8 +899,8 @@ extractor::cluster extractor::get_next_cluster()
 
 					if(p_len < min_dist){
 						vector<pair<string, string>>().swap(next_cluster.reads);
-						//vector<sa_read>().swap(next_cluster.sa_reads);
-						next_cluster.sa_reads.clear();
+						vector<sa_read>().swap(next_cluster.sa_reads);
+						//next_cluster.sa_reads.clear();
 						strncpy( ref,  rc.getChromosome(), 50);
 						continue;
 					}
