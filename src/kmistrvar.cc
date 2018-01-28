@@ -908,7 +908,7 @@ int read_count = 0;
 			regions.push_back({chr,{1, 300000000}});  //WARNING: This will not work with all reference files. Same with old version. 
 		}
 	}
-
+	int num_cl = 0;
 	//Assemble contigs and build kmer index
 	//=====================================
 	cerr << "Assembling contigs..." << endl;
@@ -928,7 +928,8 @@ int read_count = 0;
 		if (!p.reads.size()) 
 			continue;
 
-		if ( two_pass && p.sup)
+		//if ( two_pass && p.sup)
+		if ( 1)
 		{
 			fprintf( stderr, "BUFFER %d\n", p.reads.size() );
 			buffer_cluster.push_back( p );
@@ -937,6 +938,7 @@ int read_count = 0;
 		fprintf( stderr, "MEH %d\n", p.reads.size() );
 		//Assemble contigs
 		contigs = as.assemble(p.reads); 
+		num_cl++;
 
 //STATS
 if(PRINT_STATS){
@@ -970,21 +972,63 @@ if(PRINT_STATS){
 					all_compressed_contigs.push_back(compress(contig));
 				}
 			}
+		fprintf( stdout, "> %s\n", contig.data.c_str() );
 		}
+
 		vector<contig>().swap(contigs);
 	}
 
-	fprintf( stderr, " Total %lu clusters are buffered\n", buffer_cluster.size() );
-	for ( int i= 0; i <= (int)buffer_cluster.size(); i++)
+	fprintf( stderr, " Total %lu clusters out of %d are buffered\n", buffer_cluster.size(), num_cl );
+	fprintf( stderr, " Total %lu sa are collected\n", ext.supply_dict.size() );
+	for ( int i= 0; i < (int)buffer_cluster.size(); i++)
 	{
+		extractor::read tmp;
+		int add_read;
+		for ( int j = 0; j < (int)buffer_cluster[i].sa_reads.size(); j++ )
+		{
+			//fprintf( stderr, "check %s\n", buffer_cluster[i].sa_reads[j].name.c_str() );
+			add_read = ext.dump_supply( buffer_cluster[i].sa_reads[j].name.c_str(), buffer_cluster[i].sa_reads[j].flag, buffer_cluster[i].sa_reads[j].pos, true, tmp);
+
+			if (add_read)
+				buffer_cluster[i].reads.push_back( {tmp.name, tmp.seq } );
+		}
 		fprintf( stderr, "cluster %d has %d readss\n", i, buffer_cluster[i].reads.size() );
+		contigs = as.assemble(buffer_cluster[i].reads); 
+		for ( auto &contig: contigs)
+		{
+			fprintf( stdout, "< %s\n", contig.data.c_str() ); 
+			if (contig.support() >= min_support && contig.support() <= max_support) { //no loss of sensitivity! 
+
+				//STATS
+				if(PRINT_STATS){
+				contig_count2++; 
+				support_count += contig.support();	
+
+				//if(pt.get_start() == 55180921){
+				////cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
+				////cout << contig.data << endl;
+				//}
+				}
+			//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
+				//cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
+				cluster_info.push_back({ buffer_cluster[i].start, (find(chromos.begin(), chromos.end(), buffer_cluster[i].ref) - chromos.begin()) });
+				if(PRINT_READS){
+					all_contigs.push_back(contig);
+				}
+				else{
+					all_compressed_contigs.push_back(compress(contig));
+				}
+			}
+		
+		
+		}
 	}
 
 	if(all_contigs.empty() && all_compressed_contigs.empty()){
 		cerr << "No contigs could be assembled. Exiting..." << endl;
 		exit(1);
 	}
-
+	//exit(0);
 if(PRINT_STATS){
 	cerr << "Read Count: " << read_count << endl;
 	cerr << "Partition Count: " << part_count << endl;

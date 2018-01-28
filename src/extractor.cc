@@ -782,7 +782,8 @@ extractor::cluster extractor::get_next_cluster()
 	int p_start = 0, p_end = 0, p_len = 0;
 	int add_read = 0 ;
 	int has_supply  = 0; // has sup mappings or not;	buffer in cluster for two-stage 
-	
+
+	sa_read tmp_sa;
 	char sa_ref[50];
 	int  sa_pos = 0, sa_nm = 0;
 
@@ -792,6 +793,7 @@ extractor::cluster extractor::get_next_cluster()
 
 			const Record &rc = parser->next();
 
+			//fprintf( stderr, "READ %s\n", rc.getReadName() );
 			add_read   = 0;
 
 
@@ -802,11 +804,13 @@ extractor::cluster extractor::get_next_cluster()
 				orphan_flag  = (  (flag & 0xc) == 0xc); 
 				oea_flag     = ( ((flag & 0xc) == 0x4) || ((flag & 0xc) == 0x8) );
 				chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
+				// If Thre is a Suuply mappings, put it in supply_dict
+				check_supply_mappings( rc );
 
 				if ( !orphan_flag and !chimera_flag )
 				{
-					// If Thre is a Suuply mappings, put it in supply_dict
-					check_supply_mappings( rc );
+					//// If Thre is a Suuply mappings, put it in supply_dict
+					//check_supply_mappings( rc );
 					//
 					t_loc = 0; 
 					if ( oea_flag )
@@ -844,14 +848,22 @@ extractor::cluster extractor::get_next_cluster()
 				}
 				else if ( two_pass )
 				{
-
+					//fprintf( stderr, "FUCK0");
+					//strncpy( tmp_sa.name, rc.getReadName(), 1024);
+					tmp_sa.name =  string( rc.getReadName() );
+					tmp_sa.flag = flag;
+					tmp_sa.pos = pos;
+					next_cluster.sa_reads.push_back( tmp_sa );
+					num_read++; 
 					has_supply = 1;
+					//fprintf( stderr, "FUCK");
 					//fprintf(stderr, "%d\n", has_supply);
 				}
 			}
 
 			if ( add_read )
 			{
+				//fprintf( stderr, "add read %s\n", rc.getReadName() );	
  
 				if(next_cluster.reads.empty()){
 					strncpy( ref,  rc.getChromosome(), 50);
@@ -883,6 +895,8 @@ extractor::cluster extractor::get_next_cluster()
 
 					if(p_len < min_dist){
 						vector<pair<string, string>>().swap(next_cluster.reads);
+						//vector<sa_read>().swap(next_cluster.sa_reads);
+						next_cluster.sa_reads.clear();
 						strncpy( ref,  rc.getChromosome(), 50);
 						continue;
 					}
@@ -892,7 +906,7 @@ extractor::cluster extractor::get_next_cluster()
 					}
 				}
 			}
-			
+			//fprintf( stderr, "done %s\n", rc.getReadName() );	
 			//parser->readNextDiscordant();
 			parser->readNext();
 		}

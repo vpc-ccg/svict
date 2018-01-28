@@ -15,7 +15,7 @@ class extractor
 private:
 
 	Parser* parser;
-	unordered_map<string,pair<string, string>> supply_dict;
+	//unordered_map<string,pair<string, string>> supply_dict;
 	unordered_map<string, Record> map_oea;
 	unordered_map<string, Record> map_read;
 	unordered_map<string, Record> map_orphan;
@@ -26,20 +26,31 @@ private:
 	bool both_mates;
 	bool two_pass;
 
+
+
+public:
+	unordered_map<string,pair<string, string>> supply_dict;
+
 	struct read{
 		string name;
 		string seq;
 	};
-
-public:
-
+	
+	struct sa_read{
+		string 	name;
+		//char *name;
+		int 	flag;
+		size_t 	pos;
+	};
 	struct cluster{
 		vector<pair<string, string>> reads;
+		vector< sa_read > sa_reads;
 		int start;
 		int end;
 		string ref;
 		int sup;
 	};
+
 
 private:
 	int md_length( char *md);
@@ -55,13 +66,14 @@ private:
 	bool has_supply_mapping( const char *attr );
 	int scan_supply_mappings( const string filename, int ftype );
 	int check_supply_mappings( const Record &rc );
-	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
+	//int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
 	//int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp, const char *ref_name, const int sa_pos);
 
 public:
 	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true );
 	~extractor();
 	extractor::cluster get_next_cluster();
+	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
 	bool has_next_cluster();
 	void clear_maps();
 };
