@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <algorithm>
 #include "extractor.h"
 
 
@@ -79,7 +80,26 @@ inline void output_record(FILE *fp, int ftype, const Record &rc)
 
 	fwrite(record.c_str(), 1, record.size(), fp);
 }
-
+/***************************************************************/
+bool extractor::comp_primap( const pri_map &p1, const pri_map &p2)
+{
+	return ( p1.pos < p2.pos);
+}
+/***************************************************************/
+int extractor::sort_primap( const string &chr)
+//vector<pri_map > &vec_primap )
+{
+	int flag = 0;
+	unordered_map<string, vector<pri_map> >::iterator it = supply_dict.find(chr);
+	if ( it != supply_dict.end() )
+	{
+		//fprintf(stderr, "sorting %s %d\n", chr.c_str(), it->second[0].pos );
+		sort( it->second.begin(), it->second.end(), comp_primap);
+		//fprintf(stderr, "cmp %s %d\n", chr.c_str(), it->second[0].pos );
+		flag = 1;
+	}
+	flag = 1;
+}
 /***************************************************************/
 int extractor::md_length( char *md)
 {
@@ -130,21 +150,22 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 /****************************************************************/
 // SA:rname ,pos ,strand ,CIGAR ,mapQ ,NM
 // SA:Z:Y,13414724,-,55M130S,60,0;
-int extractor::parse_supply( const char *attr, char *ref, int &loc, int &nm )
+int extractor::parse_supply( const char *attr, char *ref, int &loc, char &strand, int &nm )
 {
        int flag = 0;
 	   char *misc=(char*)malloc(1024);
 	   char *buf =(char*)malloc(1024);
 	   int ret = 0;
 	   int offset = 0;
-	   char c;
+	   //char c;
        while( *attr )
        {
 	   		ret = sscanf(attr, "%s%n", misc, &offset);
 			if ( !strncmp( "SA",  misc, 2) )
 			{
 				//fprintf(stderr, "%s\n", misc);
-				ret = sscanf( misc+5, "%[^\,],%d,%c,%[^\,],%[^\,],%d", ref, &loc, &c, buf, buf, &nm); 
+				//rdered_map<string, vector<pri_map> > supply_dict;
+				ret = sscanf( misc+5, "%[^\,],%d,%c,%[^\,],%[^\,],%d", ref, &loc, &strand, buf, buf, &nm); 
 				//fprintf(stderr, "%d: %s %d %d\n", ret, ref, loc, nm);
 				flag = 1;
 				break;
@@ -552,210 +573,257 @@ int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, doubl
 /****************************************************************/
 int extractor::scan_supply_mappings( const string filename, int ftype )
 {
-	Parser *parser;
-	if ( !ftype )
-		parser = new BAMParser(filename);
-	else
-		parser = new SAMParser(filename);
-
-	string comment = parser->readComment();
-	int flag = 0;
-	bool has_supple = false;
-	uint32_t count = 0 ;
-	int t1 =0, t2 = 0;
-	while ( parser->hasNext() )
-	{
-		const Record &rc = parser->next();
-		has_supple = false;
-
-		flag     = rc.getMappingFlag();
-		if ( flag < 256 )
-		{
-			has_supple = has_supply_mapping( rc.getOptional() );// parse SA
-			if ( has_supple )
-			{
-				auto it    = supply_dict.find( rc.getReadName() );
-				if ( it != supply_dict.end() )
-				{
-					if ( 0x40 == (flag&0x40) )
-					{
-						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-					}
-					else
-					{
-						supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-					}
-				}
-				else
-				{
-					if ( 0x40 == (flag&0x40) )
-					{
-						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
-					}
-					else
-					{
-						supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
-					}
-				}
-
-			}
-		}
-		count++; if (0 == count%1000000){fprintf( stderr, ".");}
-		//parser->readNextDiscordant();
-		parser->readNext();
-	}
-	delete parser;
+//	Parser *parser;
+//	if ( !ftype )
+//		parser = new BAMParser(filename);
+//	else
+//		parser = new SAMParser(filename);
+//
+//	string comment = parser->readComment();
+//	int flag = 0;
+//	bool has_supple = false;
+//	uint32_t count = 0 ;
+//	int t1 =0, t2 = 0;
+//	while ( parser->hasNext() )
+//	{
+//		const Record &rc = parser->next();
+//		has_supple = false;
+//
+//		flag     = rc.getMappingFlag();
+//		if ( flag < 256 )
+//		{
+//			has_supple = has_supply_mapping( rc.getOptional() );// parse SA
+//			if ( has_supple )
+//			{
+//				auto it    = supply_dict.find( rc.getReadName() );
+//				if ( it != supply_dict.end() )
+//				{
+//					if ( 0x40 == (flag&0x40) )
+//					{
+//						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+//					}
+//					else
+//					{
+//						supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+//					}
+//				}
+//				else
+//				{
+//					if ( 0x40 == (flag&0x40) )
+//					{
+//						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+//					}
+//					else
+//					{
+//						supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+//					}
+//				}
+//
+//			}
+//		}
+//		count++; if (0 == count%1000000){fprintf( stderr, ".");}
+//		//parser->readNextDiscordant();
+//		parser->readNext();
+//	}
+//	delete parser;
 	return 0;
 }
 
 /****************************************************************/
 int extractor::check_supply_mappings( const Record &rc )
 {
+	//int flag = 0;
+	//bool has_supple = false;
+	//uint32_t count = 0 ;
+	//flag     = rc.getMappingFlag();
+	//if ( flag < 256 )
+	//{
+	//	has_supple = parse_sa( rc.getOptional() );// parse SA
+	//	if ( has_supple )
+	//	{
+	//		auto it    = supply_dict.find( rc.getReadName() );
+	//		if ( it != supply_dict.end() )
+	//		{
+	//			if ( 0x40 == (flag&0x40) )
+	//			{
+	//				supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+	//			}
+	//			else
+	//			{
+	//				supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+	//			}
+	//		}
+	//		else
+	//		{
+	//			if ( 0x40 == (flag&0x40) )
+	//			{
+	//				supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+	//			}
+	//			else
+	//			{
+	//				supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+	//			}
+	//		}
+
+	//	}
+	//}
+	return 0;
+}
+/****************************************************************/
+int extractor::check_supply_mappings2( const Record &rc )
+{
 	int flag = 0;
 	bool has_supple = false;
 	uint32_t count = 0 ;
 	flag     = rc.getMappingFlag();
+	
+	char sa_ref[50];
+	char sa_strand;
+	int  sa_pos = 0, sa_nm = 0;
+	int  w_sa = 0;
+
+	int rev = 0;
+	pri_map pm;
+
 	if ( flag < 256 )
 	{
-		has_supple = parse_sa( rc.getOptional() );// parse SA
-		if ( has_supple )
+		w_sa = parse_supply( rc.getOptional(), sa_ref, sa_pos, sa_strand, sa_nm );
+		if ( w_sa )
 		{
-			auto it    = supply_dict.find( rc.getReadName() );
-			if ( it != supply_dict.end() )
+			//auto it    = supply_dict.find( rc.getChromosome()  );
+			auto it    = supply_dict.find( sa_ref );
+			if ( it == supply_dict.end() )
 			{
-				if ( 0x40 == (flag&0x40) )
-				{
-					supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-				}
-				else
-				{
-					supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-				}
-			}
-			else
-			{
-				if ( 0x40 == (flag&0x40) )
-				{
-					supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
-				}
-				else
-				{
-					supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
-				}
+				//supply_dict[ rc.getChromosome() ].reserve(4096);
+				supply_dict[ sa_ref  ].reserve(4096);
 			}
 
+			pm.name =  rc.getReadName();
+			pm.pos  = sa_pos;
+
+			if ( ( 0x10 == (flag&0x10) && ('+' == sa_strand ) )
+					|| ( 0x10 != (flag&0x10) && ('-' == sa_strand ) ))
+			{ rev = 1;}
+			pm.seq = (rev)? reverse_complement( rc.getSequence() ): rc.getSequence() ;
+
+			//supply_dict[ rc.getChromosome() ].push_back( pm );
+			supply_dict[ sa_ref ].push_back( pm );
 		}
 	}
+	//free(sa_ref);
 	return 0;
 }
 /****************************************************************/
-// return the entry obtained in the final string
 int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp)
+{ return 0;}
+/****************************************************************/
+// return the entry obtained in the final string
+int extractor::dump_supply0( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp)
 //int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp )
 {
 	int num = 0 ;
-	auto it    = supply_dict.find( readname );
-	if ( it != supply_dict.end() )
-	{
-		int fr_flag = ( 0 < it->second.first.size()  ) ? 1 : 0;
-		int se_flag = ( 0 < it->second.second.size() ) ? 1 : 0;
-		// if the read indeed contains first and second mate 
+	//auto it    = supply_dict.find( readname );
+	//if ( it != supply_dict.end() )
+	//{
+	//	int fr_flag = ( 0 < it->second.first.size()  ) ? 1 : 0;
+	//	int se_flag = ( 0 < it->second.second.size() ) ? 1 : 0;
+	//	// if the read indeed contains first and second mate 
 
-		if ( flag & 0x10 ) // clipped being reversed
-		{ 	
-			if ( flag & 0x40 ) // first mate being soft-clipped 
-			{
-				if ( !fr_flag ) // forced to place the other mate
-				{
-					tmp.name = string(readname) + "+";
-					tmp.seq = it->second.second;
-					num = 1;
-				}
-				else if ( !se_flag )
-				{
-					tmp.name = string(readname) + "-";
-					tmp.seq = reverse_complement( it->second.first );
-					num = 1;
-				}
-				else
-				{
-					tmp.name = string(readname) + "-";
-					tmp.seq = reverse_complement( it->second.first );
-					num = 2;
-				}
-			}
-			else // second mate being soft-clipped
-			{
-				if ( !se_flag ) // forced to place the other mate
-				{
-					tmp.name = string(readname) + "+";
-					tmp.seq = it->second.first;
-					num = 1;
-				}
-				else if ( !fr_flag )
-				{
-					tmp.name = string(readname) + "-";
-					tmp.seq = reverse_complement( it->second.second );
-					num = 1;
-				}
-				else
-				{
-					tmp.name = string(readname) + "-";
-					tmp.seq = reverse_complement( it->second.second );
-					num = 2;
-				}
-			}
-		}
-		else // clipped reads are forward
-		{
-			if ( flag & 0x40 ) // first mate being soft-clipped 
-			{
-				if ( !fr_flag ) // forced to place the other mate
-				{
-					tmp.name = string(readname) + "-";
-					tmp.seq = reverse_complement( it->second.second );
-					num = 1;
-				}
-				else if ( !se_flag )
-				{
-					tmp.name = string(readname) + "+";
-					tmp.seq = it->second.first;
-					num = 1;
-				}
-				else
-				{
-					tmp.name = string(readname) + "+";
-					tmp.seq = it->second.first;
-					num = 2;
-				}
-			}
-			else // second mate being clipped
-			{
-				if ( !se_flag ) // forced to place the other mate
-				{
-					tmp.name = string(readname) + "-";
-					tmp.seq = reverse_complement( it->second.first );
-					num = 1;
-				}
-				else if ( !fr_flag )
-				{
-					tmp.name = string(readname) + "+";
-					tmp.seq = it->second.second;
-					num = 1;
-				}
-				else
-				{
-					tmp.name = string(readname) + "+";
-					tmp.seq = it->second.second;
-					num = 2;
-				}
-			}
-		}
-	}
-	else
-	{
-		ERROR("Supply mappings %s are missing in two-pass scan. SAM/BAM files might be invalid\n", readname );
-	}
+	//	if ( flag & 0x10 ) // clipped being reversed
+	//	{ 	
+	//		if ( flag & 0x40 ) // first mate being soft-clipped 
+	//		{
+	//			if ( !fr_flag ) // forced to place the other mate
+	//			{
+	//				tmp.name = string(readname) + "+";
+	//				tmp.seq = it->second.second;
+	//				num = 1;
+	//			}
+	//			else if ( !se_flag )
+	//			{
+	//				tmp.name = string(readname) + "-";
+	//				tmp.seq = reverse_complement( it->second.first );
+	//				num = 1;
+	//			}
+	//			else
+	//			{
+	//				tmp.name = string(readname) + "-";
+	//				tmp.seq = reverse_complement( it->second.first );
+	//				num = 2;
+	//			}
+	//		}
+	//		else // second mate being soft-clipped
+	//		{
+	//			if ( !se_flag ) // forced to place the other mate
+	//			{
+	//				tmp.name = string(readname) + "+";
+	//				tmp.seq = it->second.first;
+	//				num = 1;
+	//			}
+	//			else if ( !fr_flag )
+	//			{
+	//				tmp.name = string(readname) + "-";
+	//				tmp.seq = reverse_complement( it->second.second );
+	//				num = 1;
+	//			}
+	//			else
+	//			{
+	//				tmp.name = string(readname) + "-";
+	//				tmp.seq = reverse_complement( it->second.second );
+	//				num = 2;
+	//			}
+	//		}
+	//	}
+	//	else // clipped reads are forward
+	//	{
+	//		if ( flag & 0x40 ) // first mate being soft-clipped 
+	//		{
+	//			if ( !fr_flag ) // forced to place the other mate
+	//			{
+	//				tmp.name = string(readname) + "-";
+	//				tmp.seq = reverse_complement( it->second.second );
+	//				num = 1;
+	//			}
+	//			else if ( !se_flag )
+	//			{
+	//				tmp.name = string(readname) + "+";
+	//				tmp.seq = it->second.first;
+	//				num = 1;
+	//			}
+	//			else
+	//			{
+	//				tmp.name = string(readname) + "+";
+	//				tmp.seq = it->second.first;
+	//				num = 2;
+	//			}
+	//		}
+	//		else // second mate being clipped
+	//		{
+	//			if ( !se_flag ) // forced to place the other mate
+	//			{
+	//				tmp.name = string(readname) + "-";
+	//				tmp.seq = reverse_complement( it->second.first );
+	//				num = 1;
+	//			}
+	//			else if ( !fr_flag )
+	//			{
+	//				tmp.name = string(readname) + "+";
+	//				tmp.seq = it->second.second;
+	//				num = 1;
+	//			}
+	//			else
+	//			{
+	//				tmp.name = string(readname) + "+";
+	//				tmp.seq = it->second.second;
+	//				num = 2;
+	//			}
+	//		}
+	//	}
+	//}
+	//else
+	//{
+	//	ERROR("Supply mappings %s are missing in two-pass scan. SAM/BAM files might be invalid\n", readname );
+	//}
 
 	return num;
 }
@@ -785,7 +853,9 @@ extractor::cluster extractor::get_next_cluster()
 
 	sa_read tmp_sa;
 	char sa_ref[50];
+	char sa_strand;
 	int  sa_pos = 0, sa_nm = 0;
+	int  w_sa = 0;
 
 	while(1){
 		if ( parser->hasNext() )
@@ -804,12 +874,15 @@ extractor::cluster extractor::get_next_cluster()
 				orphan_flag  = (  (flag & 0xc) == 0xc); 
 				oea_flag     = ( ((flag & 0xc) == 0x4) || ((flag & 0xc) == 0x8) );
 				chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
-				// If Thre is a Suuply mappings, put it in supply_dict
-				check_supply_mappings( rc );
+				// If Thre is a Suuply mappings, put it in the correspond chromosome of supply_dict
+				//check_supply_mappings( rc );
+				check_supply_mappings2( rc );
+				
+
 
 				if ( !orphan_flag and !chimera_flag )
 				{
-					//// If Thre is a Suuply mappings, put it in supply_dict
+					//// check here will lose sensitivity
 					//check_supply_mappings( rc );
 					//
 					t_loc = 0; 
@@ -836,11 +909,11 @@ extractor::cluster extractor::get_next_cluster()
 				// supply_dict does not always include both mate, so we need to check to prevent including empty reads
 				
 				pos      = rc.getLocation();
-				parse_supply( rc.getOptional(), sa_ref, sa_pos, sa_nm );
+				//parse_supply( rc.getOptional(), sa_ref, sa_pos, sa_strand, sa_nm );
 				// insert the hard-clipped mate itself
 				//add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);
-				if ( ( sa_ref <= rc.getChromosome() ) && ( sa_pos <= pos) )
-				{	add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);	}
+				//if ( ( sa_ref <= rc.getChromosome() ) && ( sa_pos <= pos) )
+				//{	add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);	}
 				
 				if ( add_read )
 				{ 
@@ -851,7 +924,7 @@ extractor::cluster extractor::get_next_cluster()
 					//fprintf( stderr, "FUCK0");
 					//strncpy( tmp_sa.name, rc.getReadName(), 1024);
 					tmp_sa.name =  string( rc.getReadName() );
-					tmp_sa.flag = flag;
+					//tmp_sa.flag = flag;
 					tmp_sa.pos = pos;
 					next_cluster.sa_reads.push_back( tmp_sa );
 					num_read++; 

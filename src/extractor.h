@@ -1,6 +1,7 @@
 #ifndef __EXTRACTOR__
 #define __EXTRACTOR__
 
+#include <algorithm>
 #include "common.h"
 #include "sam_parser.h"
 #include "bam_parser.h"
@@ -29,19 +30,26 @@ private:
 
 
 public:
-	unordered_map<string,pair<string, string>> supply_dict;
+	struct pri_map{
+		string 	name;
+		string  seq;
+		//int 	flag;
+		size_t 	pos;
+	};
+	//unordered_map<string,pair<string, string>> supply_dict;
+	unordered_map<string, vector<pri_map> > supply_dict;
 
 	struct read{
 		string name;
 		string seq;
 	};
 	
-	struct sa_read{
+	struct sa_read {
 		string 	name;
-		//char *name;
-		int 	flag;
+		//int 	flag;
 		size_t 	pos;
 	};
+
 	struct cluster{
 		vector<pair<string, string>> reads;
 		vector< sa_read > sa_reads;
@@ -54,7 +62,7 @@ public:
 
 private:
 	int md_length( char *md);
-	int parse_supply( const char *attr, char *rname, int &loc, int &nm );
+	int parse_supply( const char *attr, char *rname, int &loc, char &c, int &nm );
 	int parse_sc( const char *cigar, int &match_l, int &read_l );
 	int get_endpoint( const uint32_t pos, const uint32_t pair_pos, const int match_l, const int tlen, int &t_s, int &t_e );
 	int process_orphan( const Record &rc, FILE *forphan, FILE *f_int, int ftype);
@@ -66,6 +74,7 @@ private:
 	bool has_supply_mapping( const char *attr );
 	int scan_supply_mappings( const string filename, int ftype );
 	int check_supply_mappings( const Record &rc );
+	int check_supply_mappings2( const Record &rc );
 	//int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
 	//int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp, const char *ref_name, const int sa_pos);
 
@@ -73,7 +82,10 @@ public:
 	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true );
 	~extractor();
 	extractor::cluster get_next_cluster();
+	int dump_supply0( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
 	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
+	static bool comp_primap( const pri_map &p1, const pri_map &p2);
+	int sort_primap( const string &chr);
 	bool has_next_cluster();
 	void clear_maps();
 };

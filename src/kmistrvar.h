@@ -6,6 +6,7 @@
 #include <cstring>
 #include <bitset>
 #include <limits>
+#include <algorithm>
 #include "variant_caller.h"
 #include "partition.h"
 #include "common.h"

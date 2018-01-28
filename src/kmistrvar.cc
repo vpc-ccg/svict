@@ -889,7 +889,7 @@ if(PRINT_STATS){
 /***************************************************************/
 void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
-	vector< extractor::cluster > buffer_cluster; 
+	unordered_map< string, vector< extractor::cluster > > buffer_cluster;  // chromosome to a vector of buffered clusters
 	buffer_cluster.reserve(1024);
 
 	vector<contig> contigs;
@@ -909,6 +909,7 @@ int read_count = 0;
 		}
 	}
 	int num_cl = 0;
+	string cur_ref = "";
 	//Assemble contigs and build kmer index
 	//=====================================
 	cerr << "Assembling contigs..." << endl;
@@ -928,11 +929,18 @@ int read_count = 0;
 		if (!p.reads.size()) 
 			continue;
 
-		//if ( two_pass && p.sup)
-		if ( 1)
+		if (cur_ref != p.ref)
+		{
+			buffer_cluster[p.ref].reserve(4096);
+			cur_ref = p.ref;
+		}
+		
+		if ( two_pass && p.sup)
+		//if ( 1)
 		{
 			//fprintf( stderr, "BUFFER %d\n", p.reads.size() );
-			buffer_cluster.push_back( p );
+
+			buffer_cluster[p.ref].push_back( p );
 			continue;
 		}
 		//fprintf( stderr, "MEH %d\n", p.reads.size() );
@@ -980,55 +988,136 @@ if(PRINT_STATS){
 
 	fprintf( stderr, " Total %lu clusters out of %d are buffered\n", buffer_cluster.size(), num_cl );
 	fprintf( stderr, " Total %lu sa are collected\n", ext.supply_dict.size() );
-	for ( int i= 0; i < (int)buffer_cluster.size(); i++)
+	
+	unordered_map< string, vector< extractor::cluster > >::iterator bit;
+	unordered_map<string, vector<extractor::pri_map> >::iterator it;
+	
+	int n_sa = 0, n_pa = 0; // number of primary mapping information kept in each chromosome
+	int sa_i = 0, pa_i = 0; // index of sa in a cluster and pa in supply_dict
+	int pa_start = 0;
+
+	for ( bit = buffer_cluster.begin(); bit != buffer_cluster.end(); bit++)
 	{
-		extractor::read tmp;
-		int add_read;
-		for ( int j = 0; j < (int)buffer_cluster[i].sa_reads.size(); j++ )
+		//fprintf(stderr, "Check chr %s\n", bit->first.c_str());
+		it = ext.supply_dict.find( bit->first );
+		if ( it != ext.supply_dict.end() )
 		{
-			//fprintf( stderr, "check %s\n", buffer_cluster[i].sa_reads[j].name.c_str() );
-			add_read = ext.dump_supply( buffer_cluster[i].sa_reads[j].name.c_str(), buffer_cluster[i].sa_reads[j].flag, buffer_cluster[i].sa_reads[j].pos, true, tmp);
+			fprintf(stderr, "Resolving SA in chr %s\n", bit->first.c_str());
+			ext.sort_primap( it->first );
+			n_sa = (int)bit->second.size();// a cluster
+			n_pa = (int)it->second.size();
+			sa_i = 0;
+			pa_i = 0;
+			pa_start = 0;
 
-			if (add_read)
-				buffer_cluster[i].reads.push_back( {tmp.name, tmp.seq } );
-		}
-		fprintf( stderr, "cluster %d has %d readss\n", i, buffer_cluster[i].reads.size() );
-		contigs = as.assemble(buffer_cluster[i].reads); 
-		for ( auto &contig: contigs)
-		{
-			//fprintf( stdout, "< %s\n", contig.data.c_str() ); 
-			if (contig.support() >= min_support && contig.support() <= max_support) { //no loss of sensitivity! 
+			for( int sa_i = 0; sa_i < n_sa; sa_i ++ )
+			{	// increment cluster
+				for( int j = 0; j < (int) bit->second[sa_i].sa_reads.size(); j++)
+				{
+					pa_i = pa_start;
+					while( (pa_i < n_pa) && (bit->second[sa_i].sa_reads[j].pos < it->second[pa_i].pos ))
+					{
+						if ( (it->second[pa_i].pos == bit->second[sa_i].sa_reads[j].pos) && (it->second[pa_i].name == bit->second[sa_i].sa_reads[j].name) )
+						{
+							//bit->secondbuffer_cluster[i].reads.push_back( {`tmp.name, tmp.seq } );
+							bit->second[sa_i].reads.push_back( { it->second[pa_i].name, it->second[pa_i].seq } );
+							break;
+						}
+						if ( it->second[pa_i].pos <  bit->second[sa_i].sa_reads[j].pos - 100 )
+						{	pa_start++;}
+						pa_i++;
+					}
+				}
+				//fprintf( stderr, "Buffered cluster %d in %s has %d reads\n", sa_i, bit->first.c_str(), bit->second[sa_i].reads.size() );
+				contigs = as.assemble(bit->second[sa_i].reads); 
+				
+				for ( auto &contig: contigs)
+				{
+					//fprintf( stdout, "< %s\n", contig.data.c_str() ); 
+					if (contig.support() >= min_support && contig.support() <= max_support) { //no loss of sensitivity! 
 
-				//STATS
-				if(PRINT_STATS){
-				contig_count2++; 
-				support_count += contig.support();	
-
-				//if(pt.get_start() == 55180921){
-				////cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
-				////cout << contig.data << endl;
-				//}
+						//STATS
+						if(PRINT_STATS){
+							contig_count2++; 
+							support_count += contig.support();	
+						}
+				
+						cluster_info.push_back({ bit->second[sa_i].start, (find(chromos.begin(), chromos.end(), bit->second[sa_i].ref) - chromos.begin()) });
+						//cluster_info.push_back({ buffer_cluster[i].start, (find(chromos.begin(), chromos.end(), buffer_cluster[i].ref) - chromos.begin()) });
+						if(PRINT_READS){
+							all_contigs.push_back(contig);
+						}
+						else{
+							all_compressed_contigs.push_back(compress(contig));
+						}
+					}	
 				}
-			//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
-				//cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
-				cluster_info.push_back({ buffer_cluster[i].start, (find(chromos.begin(), chromos.end(), buffer_cluster[i].ref) - chromos.begin()) });
-				if(PRINT_READS){
-					all_contigs.push_back(contig);
-				}
-				else{
-					all_compressed_contigs.push_back(compress(contig));
-				}
+		
+				
 			}
-		
-		
+		}
+		else
+		{
+			fprintf(stderr, "Warning: no sa records for  %s\n", bit->first.c_str());
 		}
 	}
+
+	//for (auto &z: ext.supply_dict){
+	//fprintf( stderr, "> %s %lu\n", z->first.c_str(), z->second.size());
+	//meh += z->second.size();
+	//}
+	//fprintf( stderr, "Meh %lu\n", meh);
+
+	
+	//for ( int i= 0; i < (int)buffer_cluster.size(); i++)
+	//{
+	//	extractor::read tmp;
+	//	int add_read;
+	//	for ( int j = 0; j < (int)buffer_cluster[i].sa_reads.size(); j++ )
+	//	{
+	//		//fprintf( stderr, "check %s\n", buffer_cluster[i].sa_reads[j].name.c_str() );
+	//		add_read = ext.dump_supply( buffer_cluster[i].sa_reads[j].name.c_str(), buffer_cluster[i].sa_reads[j].flag, buffer_cluster[i].sa_reads[j].pos, true, tmp);
+
+	//		if (add_read)
+	//			buffer_cluster[i].reads.push_back( {tmp.name, tmp.seq } );
+	//	}
+	//	fprintf( stderr, "cluster %d has %d readss\n", i, buffer_cluster[i].reads.size() );
+	//	contigs = as.assemble(buffer_cluster[i].reads); 
+	//	for ( auto &contig: contigs)
+	//	{
+	//		//fprintf( stdout, "< %s\n", contig.data.c_str() ); 
+	//		if (contig.support() >= min_support && contig.support() <= max_support) { //no loss of sensitivity! 
+
+	//			//STATS
+	//			if(PRINT_STATS){
+	//			contig_count2++; 
+	//			support_count += contig.support();	
+
+	//			//if(pt.get_start() == 55180921){
+	//			////cout << "support: " << contig.support() << " " << contig.data.length() << " " << pt.get_start() << " " << contig_id << endl;
+	//			////cout << contig.data << endl;
+	//			//}
+	//			}
+	//		//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
+	//			//cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
+	//			cluster_info.push_back({ buffer_cluster[i].start, (find(chromos.begin(), chromos.end(), buffer_cluster[i].ref) - chromos.begin()) });
+	//			if(PRINT_READS){
+	//				all_contigs.push_back(contig);
+	//			}
+	//			else{
+	//				all_compressed_contigs.push_back(compress(contig));
+	//			}
+	//		}
+	//	
+	//	
+	//	}
+	//}
 
 	if(all_contigs.empty() && all_compressed_contigs.empty()){
 		cerr << "No contigs could be assembled. Exiting..." << endl;
 		exit(1);
 	}
-	exit(0);
+	//exit(0);
 if(PRINT_STATS){
 	cerr << "Read Count: " << read_count << endl;
 	cerr << "Partition Count: " << part_count << endl;
