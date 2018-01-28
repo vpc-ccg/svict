@@ -757,7 +757,7 @@ cerr << "ASSEMBLY TIME: " << elapsed_secs << endl;
 cerr << endl;
 begin = clock();
 }
-	exit(0);
+	//exit(0);
 	index();
 
 if(PRINT_STATS){
@@ -889,8 +889,8 @@ if(PRINT_STATS){
 /***************************************************************/
 void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
-	vector< extractor::cluster > buffer_contigs; 
-	buffer_contigs.reserve(1024);
+	vector< extractor::cluster > buffer_cluster; 
+	buffer_cluster.reserve(1024);
 
 	vector<contig> contigs;
 	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
@@ -931,7 +931,7 @@ int read_count = 0;
 		if ( two_pass && p.sup)
 		{
 			fprintf( stderr, "BUFFER %d\n", p.reads.size() );
-			buffer_contigs.push_back( p );
+			buffer_cluster.push_back( p );
 			continue;
 		}
 		fprintf( stderr, "MEH %d\n", p.reads.size() );
@@ -974,7 +974,11 @@ if(PRINT_STATS){
 		vector<contig>().swap(contigs);
 	}
 
-	fprintf( stderr, " Total %lu clusters are buffered\n", buffer_contigs.size() );
+	fprintf( stderr, " Total %lu clusters are buffered\n", buffer_cluster.size() );
+	for ( int i= 0; i <= (int)buffer_cluster.size(); i++)
+	{
+		fprintf( stderr, "cluster %d has %d readss\n", i, buffer_cluster[i].reads.size() );
+	}
 
 	if(all_contigs.empty() && all_compressed_contigs.empty()){
 		cerr << "No contigs could be assembled. Exiting..." << endl;

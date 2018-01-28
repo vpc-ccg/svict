@@ -805,7 +805,7 @@ extractor::cluster extractor::get_next_cluster()
 
 				if ( !orphan_flag and !chimera_flag )
 				{
-					// todo: check SA for two pass mode
+					// If Thre is a Suuply mappings, put it in supply_dict
 					check_supply_mappings( rc );
 					//
 					t_loc = 0; 
@@ -846,7 +846,7 @@ extractor::cluster extractor::get_next_cluster()
 				{
 
 					has_supply = 1;
-					fprintf(stderr, "%d\n", has_supply);
+					//fprintf(stderr, "%d\n", has_supply);
 				}
 			}
 
