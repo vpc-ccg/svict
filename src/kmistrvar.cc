@@ -931,11 +931,11 @@ int read_count = 0;
 		//if ( two_pass && p.sup)
 		if ( 1)
 		{
-			fprintf( stderr, "BUFFER %d\n", p.reads.size() );
+			//fprintf( stderr, "BUFFER %d\n", p.reads.size() );
 			buffer_cluster.push_back( p );
 			continue;
 		}
-		fprintf( stderr, "MEH %d\n", p.reads.size() );
+		//fprintf( stderr, "MEH %d\n", p.reads.size() );
 		//Assemble contigs
 		contigs = as.assemble(p.reads); 
 		num_cl++;
@@ -972,7 +972,7 @@ if(PRINT_STATS){
 					all_compressed_contigs.push_back(compress(contig));
 				}
 			}
-		fprintf( stdout, "> %s\n", contig.data.c_str() );
+		//fprintf( stdout, "> %s\n", contig.data.c_str() );
 		}
 
 		vector<contig>().swap(contigs);
@@ -996,7 +996,7 @@ if(PRINT_STATS){
 		contigs = as.assemble(buffer_cluster[i].reads); 
 		for ( auto &contig: contigs)
 		{
-			fprintf( stdout, "< %s\n", contig.data.c_str() ); 
+			//fprintf( stdout, "< %s\n", contig.data.c_str() ); 
 			if (contig.support() >= min_support && contig.support() <= max_support) { //no loss of sensitivity! 
 
 				//STATS
@@ -1028,7 +1028,7 @@ if(PRINT_STATS){
 		cerr << "No contigs could be assembled. Exiting..." << endl;
 		exit(1);
 	}
-	//exit(0);
+	exit(0);
 if(PRINT_STATS){
 	cerr << "Read Count: " << read_count << endl;
 	cerr << "Partition Count: " << part_count << endl;
