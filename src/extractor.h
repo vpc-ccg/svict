@@ -25,6 +25,7 @@ private:
 	double clip_ratio;
 	bool both_mates;
 	bool two_pass;
+	int num_line = 0;
 
 
 
@@ -73,7 +74,7 @@ public:
 	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true );
 	~extractor();
 	extractor::cluster get_next_cluster();
-	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
+	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp, bool verbose);
 	bool has_next_cluster();
 	void clear_maps();
 };

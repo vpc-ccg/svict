@@ -890,7 +890,7 @@ if(PRINT_STATS){
 void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
 {
 	vector< extractor::cluster > buffer_cluster; 
-	buffer_cluster.reserve(1024);
+	buffer_cluster.reserve(1048576);
 
 	vector<contig> contigs;
 	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
@@ -987,7 +987,7 @@ if(PRINT_STATS){
 		for ( int j = 0; j < (int)buffer_cluster[i].sa_reads.size(); j++ )
 		{
 			//fprintf( stderr, "check %s\n", buffer_cluster[i].sa_reads[j].name.c_str() );
-			add_read = ext.dump_supply( buffer_cluster[i].sa_reads[j].name.c_str(), buffer_cluster[i].sa_reads[j].flag, buffer_cluster[i].sa_reads[j].pos, true, tmp);
+			add_read = ext.dump_supply( buffer_cluster[i].sa_reads[j].name.c_str(), buffer_cluster[i].sa_reads[j].flag, buffer_cluster[i].sa_reads[j].pos, true, tmp, true);
 
 			if (add_read)
 				buffer_cluster[i].reads.push_back( {tmp.name, tmp.seq } );

@@ -159,29 +159,20 @@ int extractor::parse_supply( const char *attr, char *ref, int &loc, int &nm )
 // SA:rname ,pos ,strand ,CIGAR ,mapQ ,NM
 int extractor::parse_sa( const char *attr )
 {
-       int flag = 0;
+       int flag = 0, offset = 0;
+	   char *misc=(char*)malloc(1024);
 
        while( *attr )
        {
-               if ('S' == *attr )
-               {
-                       flag = 1;
-               }
-               else if ( (1 == flag) && ( 'A' == *attr) )
-               {
-                       flag = 2;
-               }
-               else if ( (2 == flag) && ( ':' == *attr) )
-               {
-                       flag = 3;
-                       break;
-               }
-               else
-               {
-                       flag = 0;
-               }
-               attr++;
+	   		sscanf(attr, "%s%n", misc, &offset);
+			if ( !strncmp( "SA",  misc, 2) )
+			{
+				flag = 1;
+				break;
+			}
+			attr += offset;
        }
+	   free(misc);
        return flag;
 }
 
@@ -455,7 +446,7 @@ int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos, bool both
 // input: a record and a map for all mappings.
 // output: read name along with its location 
 /****************************************************************/
-int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, double clip_ratio, bool both_mates )
+int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, double clip_ratio, bool both_mates  )
 {
 	int flag = 0, u_flag = 0, reversed = 0;;
 	anchor_pos = 0;
@@ -650,7 +641,7 @@ int extractor::check_supply_mappings( const Record &rc )
 }
 /****************************************************************/
 // return the entry obtained in the final string
-int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp)
+int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp, bool verbose)
 //int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp )
 {
 	int num = 0 ;
@@ -752,7 +743,7 @@ int extractor::dump_supply( const char *readname, const int flag, const size_t p
 			}
 		}
 	}
-	else
+	else if (verbose)
 	{
 		ERROR("Supply mappings %s are missing in two-pass scan. SAM/BAM files might be invalid\n", readname );
 	}
@@ -793,6 +784,8 @@ extractor::cluster extractor::get_next_cluster()
 
 			const Record &rc = parser->next();
 
+			num_line++;
+			if ( 0 == num_line%1000000)fprintf( stderr, ".");
 			//fprintf( stderr, "READ %s\n", rc.getReadName() );
 			add_read   = 0;
 
@@ -838,9 +831,9 @@ extractor::cluster extractor::get_next_cluster()
 				pos      = rc.getLocation();
 				//parse_supply( rc.getOptional(), sa_ref, sa_pos, sa_nm );
 				// insert the hard-clipped mate itself
-				//add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);
-				if ( ( sa_ref <= rc.getChromosome() ) && ( sa_pos <= pos) )
-				{	add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);	}
+				add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp, false);
+				//if ( ( sa_ref <= rc.getChromosome() ) && ( sa_pos <= pos) )
+				//{	add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);	}
 				
 				if ( add_read )
 				{ 
