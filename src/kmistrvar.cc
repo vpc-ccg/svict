@@ -741,14 +741,14 @@ cerr << "not_bnd_count " << not_bnd_count << endl;
 //======================================================
 
 
-void kmistrvar::run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+void kmistrvar::run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates)
 {
 
 clock_t begin = clock();
 clock_t end;
 double elapsed_secs;
 
-	assemble(min_support, max_support, LOCAL_MODE, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+	assemble(min_support, max_support, LOCAL_MODE, min_dist, max_dist, max_num_read, clip_ratio, both_mates);
 
 if(PRINT_STATS){
 end = clock();
@@ -792,11 +792,11 @@ cerr << endl;
 // Local Assembly Stage
 //======================================================
 
-void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+void kmistrvar::assemble( int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates)
 {
 	
 	vector<contig> contigs;
-	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio, both_mates);
 
 //STATS
 double part_count = 0;

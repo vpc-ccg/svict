@@ -7,8 +7,8 @@
 using namespace std;
 
 /***************************************************************/
-extractor::extractor( string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass ):
-	min_dist(min_dist), max_dist(max_dist), max_num_read(max_num_read), clip_ratio(clip_ratio), both_mates(both_mates), two_pass(two_pass)
+extractor::extractor( string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates ):
+	min_dist(min_dist), max_dist(max_dist), max_num_read(max_num_read), clip_ratio(clip_ratio), both_mates(both_mates)
 {
 	int min_length = -1;
 	FILE *fi = fopen(filename.c_str(), "rb");
@@ -20,12 +20,6 @@ extractor::extractor( string filename, int min_dist, int max_dist, int max_num_r
 	int ftype = 1; // 0 for BAM and 1 for SAM
 	if (magic[0] == char(0x1f) && magic[1] == char(0x8b)) 
 		ftype = 0;
-
-	if ( two_pass )
-	{
-		scan_supply_mappings( filename, ftype);
-		ERROR("\n%lu supplementary mappings are collected\n", supply_dict.size() );
-	}
 
 	if ( !ftype )
 		parser = new BAMParser(filename);
@@ -577,7 +571,7 @@ int extractor::scan_supply_mappings( const string filename, int ftype )
 
 /****************************************************************/
 // return the entry obtained in the final string
-int extractor::dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp)
+int extractor::dump_supply( const string& readname, const int flag, bool both_mates, read &tmp)
 {
 	int num = 0 ;
 	auto it    = supply_dict.find( readname );
@@ -593,19 +587,19 @@ int extractor::dump_supply( const char *readname, const int flag, const size_t p
 			{
 				if ( !fr_flag ) // forced to place the other mate
 				{
-					tmp.name = string(readname) + "+";
+					tmp.name = readname + "+";
 					tmp.seq = it->second.second;
 					num = 1;
 				}
 				else if ( !se_flag )
 				{
-					tmp.name = string(readname) + "-";
+					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.first );
 					num = 1;
 				}
 				else
 				{
-					tmp.name = string(readname) + "-";
+					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.first );
 					num = 2;
 				}
@@ -614,19 +608,19 @@ int extractor::dump_supply( const char *readname, const int flag, const size_t p
 			{
 				if ( !se_flag ) // forced to place the other mate
 				{
-					tmp.name = string(readname) + "+";
+					tmp.name = readname + "+";
 					tmp.seq = it->second.first;
 					num = 1;
 				}
 				else if ( !fr_flag )
 				{
-					tmp.name = string(readname) + "-";
+					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.second );
 					num = 1;
 				}
 				else
 				{
-					tmp.name = string(readname) + "-";
+					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.second );
 					num = 2;
 				}
@@ -638,19 +632,19 @@ int extractor::dump_supply( const char *readname, const int flag, const size_t p
 			{
 				if ( !fr_flag ) // forced to place the other mate
 				{
-					tmp.name = string(readname) + "-";
+					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.second );
 					num = 1;
 				}
 				else if ( !se_flag )
 				{
-					tmp.name = string(readname) + "+";
+					tmp.name = readname + "+";
 					tmp.seq = it->second.first;
 					num = 1;
 				}
 				else
 				{
-					tmp.name = string(readname) + "+";
+					tmp.name = readname + "+";
 					tmp.seq = it->second.first;
 					num = 2;
 				}
@@ -659,28 +653,24 @@ int extractor::dump_supply( const char *readname, const int flag, const size_t p
 			{
 				if ( !se_flag ) // forced to place the other mate
 				{
-					tmp.name = string(readname) + "-";
+					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.first );
 					num = 1;
 				}
 				else if ( !fr_flag )
 				{
-					tmp.name = string(readname) + "+";
+					tmp.name = readname + "+";
 					tmp.seq = it->second.second;
 					num = 1;
 				}
 				else
 				{
-					tmp.name = string(readname) + "+";
+					tmp.name = readname + "+";
 					tmp.seq = it->second.second;
 					num = 2;
 				}
 			}
 		}
-	}
-	else
-	{
-		ERROR("Supply mappings %s are missing in two-pass scan. SAM/BAM files might be invalid\n", readname );
 	}
 
 	return num;
@@ -691,6 +681,7 @@ extractor::cluster extractor::get_next_cluster()
 {
 
 	extractor::cluster next_cluster;
+	string readname;
 	
 	int max_c = 0, tmp_c = 0;
 	int count = 0;
@@ -707,12 +698,18 @@ extractor::cluster extractor::get_next_cluster()
 	int t_loc;
 	int p_start = 0, p_end = 0, p_len = 0;
 	int add_read = 0 ;
+	bool is_spple;
+	bool supple_found;
+	bool has_supple;
 
 	while(1){
 		if ( parser->hasNext() )
 		{
 
 			const Record &rc = parser->next();
+			is_spple = false;
+			supple_found = false;
+			has_supple = false;
 
 			add_read   = 0;
 
@@ -723,6 +720,36 @@ extractor::cluster extractor::get_next_cluster()
 				orphan_flag  = (  (flag & 0xc) == 0xc); 
 				oea_flag     = ( ((flag & 0xc) == 0x4) || ((flag & 0xc) == 0x8) );
 				chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
+
+				has_supple = has_supply_mapping( rc.getOptional() );
+				readname = string(rc.getReadName());
+
+				if ( has_supple )
+				{
+					auto it    = supply_dict.find(readname);
+					if ( it != supply_dict.end() )
+					{
+						if ( 0x40 == (flag&0x40) )
+						{
+							it->second.first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+						}
+						else
+						{
+							it->second.second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+						}
+					}
+					else
+					{
+						if ( 0x40 == (flag&0x40) )
+						{
+							supply_dict[readname] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+						}
+						else
+						{
+							supply_dict[readname] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+						}
+					}
+				}
 
 				if ( !orphan_flag and !chimera_flag )
 				{
@@ -742,30 +769,42 @@ extractor::cluster extractor::get_next_cluster()
 
 					}
 
-				}
+				}	
 			}
-			else if ( two_pass && ( 0x800 == (flag & 0x800) ) )
+			else if ( ( 0x800 == (flag & 0x800) ) )
 			{		
 				// supply_dict does not always include both mate, so we need to check to prevent including empty reads
 				
 				pos      = rc.getLocation();
+				t_loc 	 = pos;
+				is_spple = true;
 
 				// insert the hard-clipped mate itself
-				add_read  = dump_supply( rc.getReadName(), flag, pos, both_mates, tmp);
+				add_read  = dump_supply( string(rc.getReadName()), flag, both_mates, tmp);
 				if ( add_read )
 				{ 
-					t_loc = pos;
+					supple_found = true;
+				}
+				else{
+					add_read = 1;
 				}
 			}
 
 			if ( add_read )
 			{
  
-				if(next_cluster.reads.empty()){
+				if(num_read == 0){
 					strncpy( ref,  rc.getChromosome(), 50);
 					next_cluster.reads.reserve(max_num_read);
 				}
-				next_cluster.reads.push_back({tmp.name,tmp.seq});
+
+				if(is_spple && !supple_found){
+					next_cluster.sa_reads.push_back((sa_read){string(rc.getReadName()), flag});
+				}
+				else{
+					next_cluster.reads.push_back({tmp.name,tmp.seq});
+				}
+
 				num_read++; 
 				num_mappings += add_read;
 
@@ -790,11 +829,21 @@ extractor::cluster extractor::get_next_cluster()
 
 					if(p_len < min_dist){
 						vector<pair<string, string>>().swap(next_cluster.reads);
+						vector<sa_read>().swap(next_cluster.sa_reads);
 						strncpy( ref,  rc.getChromosome(), 50);
 						continue;
 					}
 					else{
-						break;
+						if(next_cluster.sa_reads.size() > 0){
+							supple_clust.push_back(next_cluster);
+							vector<pair<string, string>>().swap(next_cluster.reads);
+							vector<sa_read>().swap(next_cluster.sa_reads);
+							strncpy( ref,  rc.getChromosome(), 50);
+							continue;
+						}
+						else{
+							break;
+						}
 					}
 				}
 			}
@@ -802,6 +851,27 @@ extractor::cluster extractor::get_next_cluster()
 			parser->readNextDiscordant();
 		}
 		else{
+
+			if(supple_clust.empty())break;
+
+			for(auto& read : supple_clust.back().sa_reads){
+
+				// insert the hard-clipped mate itself
+				add_read  = dump_supply( read.readname, read.flag, both_mates, tmp);
+
+				if ( add_read )
+				{
+
+					supple_clust.back().reads.push_back({tmp.name,tmp.seq});
+				}
+				else{
+					ERROR("Supplemental mappings %s are missing in SAM/BAM, file might be invalid\n", read.readname.c_str() );
+				}
+			}
+			
+			next_cluster = supple_clust.back(); //TODO think of way to avoid copy
+			supple_clust.pop_back();
+
 			break;
 		}
 	}
@@ -812,7 +882,7 @@ extractor::cluster extractor::get_next_cluster()
 
 bool extractor::has_next_cluster(){
 
-	return parser->hasNext();
+	return (parser->hasNext() || !supple_clust.empty());
 }
 
 void extractor::clear_maps(){

@@ -11,6 +11,27 @@ using namespace std;
 class extractor 
 {
 
+private:
+
+	struct read{
+		string name;
+		string seq;
+	};
+
+	struct sa_read{
+		string readname;
+		uint32_t flag;
+	};
+
+public:
+
+	struct cluster{
+		vector<pair<string, string>> reads;
+		vector<sa_read> sa_reads;
+		int start;
+		int end;
+		string ref;
+	};
 
 private:
 
@@ -19,26 +40,12 @@ private:
 	unordered_map<string, Record> map_oea;
 	unordered_map<string, Record> map_read;
 	unordered_map<string, Record> map_orphan;
+	vector<cluster> supple_clust;
 	int min_dist;
 	int max_dist;
 	int max_num_read;
 	double clip_ratio;
 	bool both_mates;
-	bool two_pass;
-
-	struct read{
-		string name;
-		string seq;
-	};
-
-public:
-
-	struct cluster{
-		vector<pair<string, string>> reads;
-		int start;
-		int end;
-		string ref;
-	};
 
 private:
 	int md_length( char *md);
@@ -52,10 +59,10 @@ private:
 	int parse_sa( const char *attr );
 	bool has_supply_mapping( const char *attr );
 	int scan_supply_mappings( const string filename, int ftype );
-	int dump_supply( const char *readname, const int flag, const size_t pos, bool both_mates, read &tmp);
+	int dump_supply( const string& readname, const int flag, bool both_mates, read &tmp);
 
 public:
-	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false, bool two_pass = true );
+	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false);
 	~extractor();
 	extractor::cluster get_next_cluster();
 	bool has_next_cluster();

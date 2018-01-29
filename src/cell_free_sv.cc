@@ -76,10 +76,10 @@ void partify (const string &read_file, const string &mate_file, const string &ou
 /********************************************************************/
 void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const string &out_vcf,
 					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE,
-					int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates, bool two_pass)
+					int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates)
 {
 	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads, print_stats);
-	predictor.run_kmistrvar(out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, min_dist, max_dist, max_num_read, clip_ratio, both_mates, two_pass);
+	predictor.run_kmistrvar(out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, min_dist, max_dist, max_num_read, clip_ratio, both_mates);
 }
 
 /********************************************************************/
@@ -429,15 +429,11 @@ void printHELP()
 	LOG( "\t-h|--help:\tShows help message.");
 	LOG( "\t-v|--version:\tShows current version.");
 	LOG( "\t\nMandatory Parameters:");
-	LOG( "\t-i|--input:\tInput file. (SAM/BAM for making partition; partition for SV detection.)");
+	LOG( "\t-i|--input:\tInput file. (SAM/BAM)");
 	LOG( "\t-o|--output:\tPrefix or output file");
 	LOG( "\t\nParameters for Supplementary Information:");
 	LOG( "\t-r|--reference:\tReference Genome. Required for SV detection." );
 	LOG( "\t-g|--annotation:\tGTF file for gene annotation." );
-	LOG( "\t-x|--unmapped:\tUnmapped reads file for generating paritions.");
-	LOG( "\t\nWorkflow Parametes:");
-	LOG( "\t-z|--exp:\tExperimental express mode for generating partition from mapping file.\n");
-	LOG( "\t-t|--two-pass:\tScanning SAM/BAM file first to keep supplementary mapping information.\n");
 	LOG( "\t\nOptional Parameters:");
 	LOG( "\t-b|--barcode:\tInput reads contain barcodes.");
 	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
@@ -458,13 +454,7 @@ void printHELP()
 
 	LOG( "\t\nExample Command:");
 	LOG( "\tRunning SVICT from a SAM/BAM file can be done in single command:");
-	LOG( "\t./SVICT -i input.sam -r human_genome.fa -o final -z\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
-	LOG( "\tRunning SVICT from a SAM/BAM in two-pass mode:");
-	LOG( "\t./SVICT -i input.sam -r human_genome.fa -o final -t\n\t\tThis command will generate prediction result final.vcf directly from input.sam with two-pass workflow.\n\n");
-	LOG( "\tSVICT also supports the following functions:");
-	LOG( "\t./SVICT -i input.sam -o tmp\n\t\tThis command will generate partition file tmp.partition from input.sam.\n\n");
-	LOG( "\t./SVICT -i tmp.anchor -x tmp.unmapped -o final\n\t\tThis command will generate the partition file final.partition from tmp.anchor and tmp.unmapped.\n\n");
-	LOG( "\t./SVICT -i final.partition -r human_genome.fa -o final\n\t\tThis command will generate prediction result final.vcf from final.partition.\n\n");
+	LOG( "\t./SVICT -i input.sam -r human_genome.fa -o final\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
 }
 /********************************************************************/
 int main(int argc, char *argv[])
@@ -476,15 +466,12 @@ int main(int argc, char *argv[])
 	string	input_sam  = "" ,
 			reference  = "" ,
 			out_prefix = "out" ,
-			annotation = "" ,
-			unmapped   = "" ;
-	int threshold = 1000, k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, min_dist = 5, max_dist = 1000, max_reads = 200; 
+			annotation = "" ;
+
+	int k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, min_dist = 5, max_dist = 1000, max_reads = 200; 
 	bool barcodes = false, print_reads = false, print_stats = false;
-	bool both_mates = false, two_pass = true;
-	int sam_flag  = 0, 
-		un_flag   = 0,
-		ref_flag  = 0;
-	int op_code   = -1;
+	bool both_mates = false;
+	int ref_flag  = 0;
 
 	static struct option long_opt[] =
 	{
@@ -497,7 +484,6 @@ int main(int argc, char *argv[])
 		{ "barcodes", no_argument, 0, 'b' },
 		{ "print_reads", no_argument, 0, 'p' },
 		{ "print_stats", no_argument, 0, 'P' },
-		{ "cluster", required_argument, 0, 'c' },
 		{ "kmer", required_argument, 0, 'k' },
 		{ "anchor", required_argument, 0, 'a' },
 		{ "min_support", required_argument, 0, 's' },
@@ -508,13 +494,11 @@ int main(int argc, char *argv[])
 		{ "min_dist", required_argument, 0, 'd' },
 		{ "max_dist", required_argument, 0, 'D' },
 		{ "max_reads", required_argument, 0, 'n' },
-		{ "unmapped", required_argument, 0, 'x' },
-		{ "express", no_argument, 0, 'z' },
-		{ "both-mate", no_argument, 0, 'B' },
+	//	{ "both-mate", no_argument, 0, 'B' },
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPc:k:a:s:S:u:m:M:d:D:n:x:zB", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPk:a:s:S:u:m:M:d:D:n:", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -538,7 +522,6 @@ int main(int argc, char *argv[])
 				break;
 			case 'i':
 				input_sam.assign( optarg );
-				sam_flag = 1;
 				break;
 			case 'r':
 				reference.assign( optarg );
@@ -549,13 +532,6 @@ int main(int argc, char *argv[])
 				break;
 			case 'g':
 				annotation.assign( optarg );
-				break;
-			case 'x':
-				unmapped.assign( optarg );
-				un_flag   = 1;
-				break;
-			case 'c':
-				threshold = atoi(optarg);
 				break;
 			case 'k':
 				k = atoi(optarg);
@@ -587,9 +563,6 @@ int main(int argc, char *argv[])
 			case 'n':
 				max_reads = atoi(optarg);
 				break;
-			case 'z':
-				two_pass = false;
-				break;
 			case '?':
 				fprintf(stderr, "Unknown parameter: %s\n", long_opt[opt_index].name);
 				return 1;
@@ -602,10 +575,6 @@ int main(int argc, char *argv[])
 	int pass = 1;
 	string msg = "";
 	// sanity checking
-	if( threshold < 0 ){
-		msg += "\tError: Cluster threshold must be a positive integer\n";
-		pass = 0;
-		}
 	if( max_reads <= 1 ){
 		msg += "\tError: Max reads in a cluster must be larger than 1\n";
 		pass = 0;
@@ -644,8 +613,6 @@ int main(int argc, char *argv[])
 	}
 
 
-	
-	//if ( !( op_code + ref_flag) ){
 	if ( !ref_flag ){
 		msg += "\tError: Reference Genome (specify by -r ) is required to predict SV\n";
 		pass =  0;
@@ -660,7 +627,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, min_dist, max_dist, max_reads, 0.99, both_mates, two_pass);
+	predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, min_dist, max_dist, max_reads, 0.99, both_mates);
 
 	return 0;
 }
