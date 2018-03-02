@@ -23,6 +23,23 @@ private:
 		uint32_t flag;
 	};
 
+	struct sortable_read{
+		string name;
+		string seq;
+		uint32_t flag;
+		int sc_loc;
+
+#if GCC_VERSION == 4080
+		bool operator<( const sortable_read& rhs) const{  //To address known GCC 4.8 bug
+			return this->sc_loc < rhs.sc_loc;
+		}
+#else 
+		bool operator<( const sortable_read& rhs){
+			return this->sc_loc < rhs.sc_loc;
+		}
+#endif
+	};
+
 public:
 
 	struct cluster{
@@ -40,31 +57,29 @@ private:
 	unordered_map<string, Record> map_oea;
 	unordered_map<string, Record> map_read;
 	unordered_map<string, Record> map_orphan;
+	vector<sortable_read> sorted_soft_clips;
 	vector<cluster> supple_clust;
-	int min_dist;
+	cluster orphan_clust;
+	string cur_ref;
+	int min_sc;
 	int max_dist;
 	int max_num_read;
 	double clip_ratio;
-	bool both_mates;
+	int index = 0;
 
 private:
-	int md_length( char *md);
 	int parse_sc( const char *cigar, int &match_l, int &read_l );
-	int get_endpoint( const uint32_t pos, const uint32_t pair_pos, const int match_l, const int tlen, int &t_s, int &t_e );
-	int process_orphan( const Record &rc, FILE *forphan, FILE *f_int, int ftype);
-	int process_oea( const Record &rc, FILE *f_map, FILE *f_unmap, FILE *f_int, int ftype, int &min_length);
-	int examine_mapping( const Record &rc, FILE *f_map, FILE *f_unmap, FILE *f_int, int ftype, double clip_ratio, int &min_length  );
-	int dump_oea( const Record &rc, read &tmp, int &anchor_pos, bool both_mates );
-	int dump_mapping( const Record &rc, read &tmp, int &anchor_pos, double clip_ratio, bool both_mates );
-	int parse_sa( const char *attr );
 	bool has_supply_mapping( const char *attr );
-	int scan_supply_mappings( const string filename, int ftype );
-	int dump_supply( const string& readname, const int flag, bool both_mates, read &tmp);
+	vector<pair<int, int>> extract_bp(string& cigar, int& mapped, int sc_loc);
+	int dump_oea( const Record &rc, read &tmp, int &anchor_pos );
+	int dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio );
+	bool dump_supply( const string& readname, const int flag, read &tmp);
+	void extract_reads();
 
 public:
-	extractor(string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99, bool both_mates = false);
+	extractor(string filename, int min_sc, int max_dist, int max_num_read, double clip_ratio = 0.99);
 	~extractor();
-	extractor::cluster get_next_cluster();
+	extractor::cluster& get_next_cluster(int uncertainty, int min_support);
 	bool has_next_cluster();
 	void clear_maps();
 };

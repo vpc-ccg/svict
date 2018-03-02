@@ -2,6 +2,7 @@
 #include "record.h"
 #include "bam_parser.h"
 
+#include <iostream>
 #include <assert.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -249,38 +250,42 @@ bool BAMParser::readNextDiscordant (void)
 			data = (char*)realloc(data, dataSize = bsize + KB);
 		gzread(input, data, bsize);
 
-		int32_t *di = (int32_t*)data;
-
-		int bin = di[2] >> 16;
-		int l_read_name = di[2] & 0xff;
-		int n_cigar_op = di[3] & 0xffff;
-		int l_seq = di[4];
-
-		// rn
-		strncpy(buf, data + 8 * 4, l_read_name);
-		currentRecord.strFields[Record::RN] = buf - line;
-		buf += l_read_name;
-
 		// flag
-	 	currentRecord.intFields[Record::MF] = di[3] >> 16;
+	 	currentRecord.intFields[Record::MF] = *(int32_t*)(data +  12) >> 16;
 	 	uint32_t flag = currentRecord.getMappingFlag();
 
 	 	if ( flag < 256 || (0x800 == (flag & 0x800)) ){
 
+
+			int bin = *(int32_t*)(data +  8) >> 16;
+			int l_read_name = *(int32_t*)(data +  8) & 0xff;
+			int n_cigar_op = *(int32_t*)(data +  12) & 0xffff;
+			int l_seq = *(int32_t*)(data +  16);
+
+			// rn
+			strncpy(buf, data + 8 * 4, l_read_name);
+			currentRecord.strFields[Record::RN] = buf - line;
+			buf += l_read_name;
+
 		 	// chr
-		 	string chr = chromosomes[di[0]];
+		 	string chr = chromosomes[*(int32_t*)(data +  0)];
 			strncpy(buf, chr.c_str(), chr.size() + 1);
 			currentRecord.strFields[Record::CHR] = buf - line;
 			buf += chr.size() + 1;	 	
 
 		 	// loc
-		 	currentRecord.intFields[Record::LOC] = di[1] + 1;
+		 	currentRecord.intFields[Record::LOC] = *(int32_t*)(data +  4) + 1;
 		 	
 		 	// cigar
 		 	uint32_t *op = (uint32_t*)(data + 8 * 4 + l_read_name);
+		 	char c;
+		 	bool clipped = false;
 		 	cc = 0;
-			for (int i = 0; i < n_cigar_op; i++)
-				cc += sprintf(buf + cc, "%d%c", op[i] >> 4, "MIDNSHP=X"[op[i] & 0xf]);
+			for (int i = 0; i < n_cigar_op; i++){
+				c = "MIDNSHP=X"[op[i] & 0xf];
+				cc += sprintf(buf + cc, "%d%c", op[i] >> 4, c);
+				if(c == 'S' || c == 'H' || c == 'D' || c == 'I')clipped = true;
+			}
 			if (n_cigar_op == 0)
 				buf[cc++] = '*';
 			n_cigar_op *= 4;
@@ -288,8 +293,11 @@ bool BAMParser::readNextDiscordant (void)
 		 	currentRecord.strFields[Record::CIGAR] = buf - line;
 			buf += cc;
 
+			//if(!clipped)continue;
+
+		//if(((flag & 0x2) == 0 || clipped) && (flag & 0x200) == 0 && (flag & 0x400) == 0 && (flag & 0xc) != 0xc){
 		 	// p_chr
-		 	string pe_chr = chromosomes[di[5]];
+		 	string pe_chr = chromosomes[*(int32_t*)(data + 20)];
 		 	if (pe_chr != "*" && pe_chr == chr)
 		 		pe_chr = "=";
 		 	strncpy(buf, pe_chr.c_str(), pe_chr.size() + 1);
@@ -297,7 +305,7 @@ bool BAMParser::readNextDiscordant (void)
 			buf += pe_chr.size() + 1;
 
 			// p_loc
-		 	currentRecord.intFields[Record::P_LOC] = di[6] + 1;
+		 	currentRecord.intFields[Record::P_LOC] = *(int32_t*)(data + 24) + 1;
 
 		 	// seq
 		 	char *sq = data + 8 * 4 + l_read_name + n_cigar_op;
@@ -333,6 +341,7 @@ bool BAMParser::readNextDiscordant (void)
 			if(!found)buf += sprintf(buf, "NO");
 
 			disc_found = true;
+		//}
 		}
 
 		*buf = 0;

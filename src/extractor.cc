@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <algorithm>
 #include <unordered_map>
 #include "extractor.h"
 
@@ -7,8 +8,8 @@
 using namespace std;
 
 /***************************************************************/
-extractor::extractor( string filename, int min_dist, int max_dist, int max_num_read, double clip_ratio, bool both_mates ):
-	min_dist(min_dist), max_dist(max_dist), max_num_read(max_num_read), clip_ratio(clip_ratio), both_mates(both_mates)
+extractor::extractor( string filename, int min_sc, int max_dist, int max_num_read, double clip_ratio ):
+	min_sc(min_sc), max_dist(max_dist), max_num_read(max_num_read), clip_ratio(clip_ratio)
 {
 	int min_length = -1;
 	FILE *fi = fopen(filename.c_str(), "rb");
@@ -34,67 +35,7 @@ extractor::~extractor(){
 	delete parser;
 }
 
-// 4 is mainly for unmapped format used for building partition
-/****************************************************************/
-inline void output_record(FILE *fp, int ftype, const Record &rc)
-{
-	string record;
-	uint32_t flag = rc.getMappingFlag();
-	
-	string mate = ((flag & 0x40)==0x40)?"/1":"/2";
-	int reversed = ((flag & 0x10) == 0x10);
-	string seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
-	string qual = (reversed) ? reverse (rc.getQuality()): rc.getQuality();
 
-	if (ftype == 1)
-		record = S(">%s%s\n%s\n", rc.getReadName(), mate.c_str(), seq.c_str());
-	else if (ftype==2)
-		record = S("@%s%s\n%s\n+\n%s\n", rc.getReadName(), mate.c_str(), seq.c_str(), qual.c_str());
-	else if (ftype==3)
-		record = S("%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n",
-				rc.getReadName(),
-				rc.getMappingFlag(),
-				rc.getChromosome(),
-				rc.getLocation(),
-				rc.getMappingQuality(),
-				rc.getCigar(),
-				rc.getPairChromosome(),
-				rc.getPairLocation(),
-				rc.getTemplateLength(),
-				rc.getSequence(),
-				rc.getQuality(),
-				rc.getOptional()
-				);
-	else if ( ftype == 4 )
-	{
-		record = S("@%s %s\n", rc.getReadName(), seq.c_str() );
-	}
-
-	fwrite(record.c_str(), 1, record.size(), fp);
-}
-
-/***************************************************************/
-int extractor::md_length( char *md)
-{
-	md+=5;
-	int length = 0;
-	int tmp = 0;
-	while( *md )
-	{
-		if (isdigit(*md))
-		{ 
-			tmp = 10 * tmp + (*md - '0');
-		}
-		else
-		{
-			length += tmp;
-			tmp = 0;
-		}
-		md++;
-	}
-	if (0 < tmp){length+=tmp;}
-	return length;
-}
 /****************************************************************/
 int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 {	
@@ -120,238 +61,49 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 	if (0>match_l){match_l=0;}
 	return 0;
 }
-int extractor::parse_sa( const char *attr )
-{
-       int flag = 0;
-       while( *attr )
-       {
-               if ('S' == *attr )
-               {
-                       flag = 1;
-               }
-               else if ( (1 == flag) && ( 'A' == *attr) )
-               {
-                       flag = 2;
-               }
-               else if ( (2 == flag) && ( ':' == *attr) )
-               {
-                       flag = 3;
-                       break;
-               }
-               else
-               {
-                       flag = 0;
-               }
-               attr++;
-       }
-       return flag;
+
+/****************************************************************/
+vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_loc){	
+
+	int len = 0;
+	vector<pair<int, int>> bps;
+
+	for(char c : cigar){
+
+		if(isdigit(c)){
+			len *= 10;
+			len +=  int(c - '0');
+		}
+		else{
+			if(c == 'S' || c == 'H' || c == 'I'){
+				bps.push_back({sc_loc,len});
+			}
+			else if(c == 'M'){
+				sc_loc += len;
+				mapped += len;
+			}
+			else if(c == 'D' ){ 
+				bps.push_back({sc_loc,len});
+				sc_loc += len;
+			}
+			len = 0;
+		}
+	}
+
+	return bps;
 }
 
+/****************************************************************/
 bool extractor::has_supply_mapping( const char *attr )
 {
        return ('S' == *attr );
 }
 
-/****************************************************************/
-int extractor::get_endpoint( const uint32_t pos, const uint32_t pair_pos, const int match_l, const int tlen, int &t_s, int &t_e )
-{
-	t_s = pos;
-	t_e = pos + tlen - 1;
-	if ( 0 > tlen )
-	{
-		t_e = pos + match_l - 1;
-		t_s = pair_pos;
-	}
-}
-/****************************************************************/
-int extractor::process_orphan( const Record &rc, FILE *forphan, FILE *f_int, int ftype)
-{
-	unordered_map<string, Record>::iterator it;
-	it = map_orphan.find( rc.getReadName() );
-	if ( it != map_orphan.end() )	
-	{
-		if ( ( 0x40 == (0x40 & rc.getMappingFlag() )) )
-		{
-			output_record( forphan, ftype, rc);
-			output_record( forphan, ftype, it->second);
-			
-			output_record( f_int, 2, rc);
-			output_record( f_int, 2, it->second);
-
-		}
-		else
-		{
-			output_record( forphan, ftype, it->second);
-			output_record( forphan, ftype, rc);
-			
-			output_record( f_int, 2, it->second);
-			output_record( f_int, 2, rc);
-		}
-		map_orphan.erase(it);
-	}
-	else
-	{
-		map_orphan[ rc.getReadName() ] = rc;
-	}
-	return (int)map_orphan.size();
-}
-/****************************************************************/
-int extractor::process_oea( const Record &rc, FILE *f_map, FILE *f_unmap, FILE *f_int, int ftype, int &min_length)
-{
-	unordered_map<string, Record>::iterator it;
-	it = map_oea.find( rc.getReadName() );
-	if ( it != map_oea.end() )	
-	{
-		if ( (0x4 == ( 0x4 & rc.getMappingFlag() ) ) )
-		{
-			output_record( f_unmap, ftype, rc );
-			output_record( f_map, ftype, it->second );
-			if ( (min_length < 0 ) || ( strlen(it->second.getSequence()) < min_length ) ){ min_length = strlen(it->second.getSequence());}
-		}
-		else
-		{
-			output_record( f_map, ftype, rc);
-			output_record( f_unmap, ftype, it->second);
-			if ( (min_length < 0 ) || ( strlen(rc.getSequence() ) < min_length ) ){ min_length = strlen(rc.getSequence());}
-		}
-		// interleaved files for genotyping
-		if ( ( 0x40 == ( 0x40 & rc.getMappingFlag() ) ) )
-		{
-			output_record( f_int, 2, rc);
-			output_record( f_int, 2, it->second);
-
-		}
-		else
-		{
-			output_record( f_int, 2, it->second);
-			output_record( f_int, 2, rc);
-		}
-
-		map_oea.erase(it);
-	}
-	else
-	{
-		map_oea[ rc.getReadName() ] = rc;
-	}
-	return (int)map_oea.size();
-}
-
-/****************************************************************/
-int extractor::examine_mapping( const Record &rc, FILE *f_map, FILE *f_unmap, FILE *f_int, int ftype, double clip_ratio, int &min_length  )
-{
-	
-	unordered_map<string, Record >::iterator it = map_read.find( rc.getReadName() );
-	if ( it == map_read.end() ) 
-	{
-		map_read[rc.getReadName() ] = rc;
-	}
-	else
-	{
-		Record rc2 = it->second;
-		int flag1 =0, flag2 = 0, t_flag = 0;
-		int r1 = 0, m1 = 0, r2 = 0, m2 = 0, 
-			tmp_r1  = 0, tmp_m1  = 0,
-			tmp_r2 = 0, tmp_m2 = 0;
-		int mate_flag = 0; // 0 for rc is first mate; 1 for rc being second mate
-		string seq1, qua1, seq2, qua2;
-
-		parse_sc( rc.getCigar(), tmp_m1, tmp_r1 );
-		if ( 0 == tmp_r1) { tmp_r1 = (int) strlen( rc.getSequence() ); }
-		parse_sc( rc2.getCigar(), tmp_m2, tmp_r2 );
-		if ( 0 == tmp_r2) { tmp_r2 = (int) strlen( rc2.getSequence() ); }
-		if ( 0x40 == (0x40  & rc.getMappingFlag() ))
-		{
-			mate_flag = 0;
-			if ( r1 <= tmp_r1 && m1 <= tmp_m1 )
-			{
-				flag1 = rc.getMappingFlag();
-				r1    = tmp_r1;
-				m1    = tmp_m1;
-			} 
-			if ( r2 <= tmp_r2 && m2 <= tmp_m2 )
-			{
-				flag2 = rc2.getMappingFlag();
-				r2    = tmp_r2;
-				m2    = tmp_m2;
-			} 
-		}
-		else if ( 0x40 == (0x40 & rc2.getMappingFlag() ) )
-		{
-			mate_flag = 1;
-			if ( r2 <= tmp_r1 && m2 <= tmp_m1 )
-			{
-				flag2 = rc.getMappingFlag();
-				r2    = tmp_r1;
-				m2    = tmp_m1;
-			} 
-			if ( r1 <= tmp_r2 && m1 <= tmp_m2 )
-			{
-				flag1 = rc2.getMappingFlag();
-				r1    = tmp_r2;
-				m1    = tmp_m2;
-			} 
-		}
-
-		if ( 0 < r1 && 0 < r2 )
-		{
-			if ( ( 0x2 != ( 0x2 &flag1) ) || ( clip_ratio > ( m1 + m2 )*1.0/( r1 + r2 ) ) )
-			{
-				if ( m2 > m1 ) // second mate to mapped, first mate to unmapped
-				{
-					if ( mate_flag )
-					{
-						output_record( f_map, ftype, rc);
-						output_record( f_unmap, 4, rc2);
-						if ( (min_length < 0 ) || ( strlen(rc.getSequence()) < min_length ) ){ min_length = strlen(rc.getSequence());}
-					}
-					else
-					{
-						output_record( f_map, ftype, rc2);
-						output_record( f_unmap, 4, rc);
-						if ( (min_length < 0 ) || ( strlen(rc2.getSequence()) < min_length ) ){ min_length = strlen(rc2.getSequence());}
-					}
-					
-				}
-				else
-				{
-					if ( mate_flag )
-					{
-						output_record( f_map, ftype, rc2);
-						output_record( f_unmap, 4, rc);
-						if ( (min_length < 0 ) || ( strlen(rc2.getSequence()) < min_length ) ){ min_length = strlen(rc2.getSequence());}
-					}
-					else
-					{
-						output_record( f_map, ftype, rc);
-						output_record( f_unmap, 4, rc2);
-						if ( (min_length < 0 ) || ( strlen(rc.getSequence()) < min_length ) ){ min_length = strlen(rc.getSequence());}
-					}
-				}
-				
-				//// interleaved files for genotyping
-				//if ( ( 0x40 == ( 0x40 & rc.getMappingFlag() ) ) )
-				//{
-				//	output_record( f_int, 2, rc);
-				//	output_record( f_int, 2, rc2);
-
-				//}
-				//else
-				//{
-				//	output_record( f_int, 2, rc2);
-				//	output_record( f_int, 2, rc);
-				//}
-			}
-		}
-
-		map_read.erase( it );
-	}
-	return (int) map_read.size();
-}
-
 /***************************************************************/
-int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos, bool both_mates )
+int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos )
 {
 	unordered_map<string, Record>::iterator it;
+
 	it = map_oea.find( rc.getReadName() );
 	string seq = "";
 	int flag   = 0, 
@@ -416,15 +168,14 @@ int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos, bool both
 // input: a record and a map for all mappings.
 // output: read name along with its location 
 /****************************************************************/
-int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, double clip_ratio, bool both_mates )
+int extractor::dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio )
 {
-	int flag = 0, u_flag = 0, reversed = 0;;
-	anchor_pos = 0;
+	int flag = 0, u_flag = 0, reversed = 0, sc_loc = 0;
 
 	unordered_map<string, Record >::iterator it = map_read.find( rc.getReadName() );
 	if ( it == map_read.end() ) 
 	{
-		map_read[rc.getReadName() ] = rc;
+		map_read[rc.getReadName()] = rc;
 	}
 	else
 	{	
@@ -433,8 +184,10 @@ int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, doubl
 		int flag_1 = 0, flag_2 = 0;//, t_flag = 0;
 		int r1 = 0, m1 = 0, r2 = 0, m2 = 0; 
 		int mate_flag = 0; // 0 for using rc in parition, 1 for using rc2
-		string seq;
-
+		int len = 0;
+		int mapped = 0;
+		bool clipped = false;
+		string seq, cigar;
 
 		parse_sc( rc.getCigar(), m1, r1 );
 		if ( 0 == r1) { r1 = (int) strlen( rc.getSequence() ); }
@@ -451,10 +204,11 @@ int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, doubl
 		{
 			mate_flag = 0;
 			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
-			//seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 			flag = rc2.getMappingFlag();
 			u_flag = rc.getMappingFlag();
-			anchor_pos = rc2.getLocation();
+			cigar = string(rc.getCigar());
+			sc_loc = rc.getLocation();
+			//bps = extract_bp(cigar, mapped, sc_loc);
 			
 			if ( r1 -m1  <  r2 - m2 )
 			{
@@ -462,24 +216,26 @@ int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, doubl
 				reversed = ((rc2.getMappingFlag()  & 0x10) == 0x10);
 				flag = rc.getMappingFlag();
 				u_flag = rc2.getMappingFlag();
-				anchor_pos = rc.getLocation();
+				cigar = string(rc2.getCigar());
+				sc_loc = rc2.getLocation();
+				//if(mapped >= 30)bps = extract_bp(cigar, mapped, sc_loc);
 			}
+			else{
+				//cigar = string(rc2.getCigar());
+				//sc_loc = rc2.getLocation();
+				//extract_bp(cigar, mapped, sc_loc);
+				//if(mapped < 30)bps.clear();
+			}	
 
-
+			bps = extract_bp(cigar, mapped, sc_loc);
 
 			if (flag & 0x10)
 			{ 	//mate has to be positive
-				//if ( mate_flag )
-				//{	seq = (reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
-				//else
-				//{	seq = (reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
-				//tmp = S("%s+ %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos );
-				if ( mate_flag )
-				{
+
+				if ( mate_flag ){
 					seq = ( reversed ) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
 				}
-				else
-				{
+				else{
 					seq = ( reversed ) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 				}
 				tmp.name = string(rc.getReadName()) + "+";
@@ -487,17 +243,10 @@ int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, doubl
 			}
 			else
 			{ 
-				//if ( mate_flag)
-				//{	seq = (!reversed) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();	}
-				//else
-				//{	seq = (!reversed) ? reverse_complement (rc.getSequence()) : rc.getSequence();	}
-				//tmp = S("%s- %s %d\n", rc.getReadName(), seq.c_str(), anchor_pos);
-				if ( mate_flag )
-				{
+				if ( mate_flag ){
 					seq = ( !reversed ) ? reverse_complement (rc2.getSequence()) : rc2.getSequence();
 				}
-				else
-				{
+				else{
 					seq = ( !reversed ) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 				}
 				tmp.name = string(rc.getReadName()) + "-";
@@ -511,69 +260,9 @@ int extractor::dump_mapping( const Record &rc, read &tmp, int &anchor_pos, doubl
 }
 
 /****************************************************************/
-int extractor::scan_supply_mappings( const string filename, int ftype )
-{
-	Parser *parser;
-	if ( !ftype )
-		parser = new BAMParser(filename);
-	else
-		parser = new SAMParser(filename);
-
-	string comment = parser->readComment();
-	int flag = 0;
-	bool has_supple = false;
-	uint32_t count = 0 ;
-
-	while ( parser->hasNext() )
-	{
-		const Record &rc = parser->next();
-		has_supple = false;
-
-		flag     = rc.getMappingFlag();
-		if ( flag < 256 )
-		{
-			has_supple = has_supply_mapping( rc.getOptional() );// parse SA
-			//has_supple = parse_sa( rc.getOptional() );
-			if ( has_supple )
-			{
-				auto it    = supply_dict.find( rc.getReadName() );
-				if ( it != supply_dict.end() )
-				{
-					if ( 0x40 == (flag&0x40) )
-					{
-						supply_dict[rc.getReadName()].first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-					}
-					else
-					{
-						supply_dict[rc.getReadName()].second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-					}
-				}
-				else
-				{
-					if ( 0x40 == (flag&0x40) )
-					{
-						supply_dict[rc.getReadName()] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
-					}
-					else
-					{
-						supply_dict[rc.getReadName()] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
-					}
-				}
-
-			}
-		}
-		count++; if (0 == count%1000000){fprintf( stderr, ".");}
-		parser->readNextDiscordant();
-	}
-	delete parser;
-	return 0;
-}
-
-/****************************************************************/
 // return the entry obtained in the final string
-int extractor::dump_supply( const string& readname, const int flag, bool both_mates, read &tmp)
+bool extractor::dump_supply( const string& readname, const int flag, read &tmp)
 {
-	int num = 0 ;
 	auto it    = supply_dict.find( readname );
 	if ( it != supply_dict.end() )
 	{
@@ -589,19 +278,16 @@ int extractor::dump_supply( const string& readname, const int flag, bool both_ma
 				{
 					tmp.name = readname + "+";
 					tmp.seq = it->second.second;
-					num = 1;
 				}
 				else if ( !se_flag )
 				{
 					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.first );
-					num = 1;
 				}
 				else
 				{
 					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.first );
-					num = 2;
 				}
 			}
 			else // second mate being soft-clipped
@@ -610,19 +296,16 @@ int extractor::dump_supply( const string& readname, const int flag, bool both_ma
 				{
 					tmp.name = readname + "+";
 					tmp.seq = it->second.first;
-					num = 1;
 				}
 				else if ( !fr_flag )
 				{
 					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.second );
-					num = 1;
 				}
 				else
 				{
 					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.second );
-					num = 2;
 				}
 			}
 		}
@@ -634,19 +317,16 @@ int extractor::dump_supply( const string& readname, const int flag, bool both_ma
 				{
 					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.second );
-					num = 1;
 				}
 				else if ( !se_flag )
 				{
 					tmp.name = readname + "+";
 					tmp.seq = it->second.first;
-					num = 1;
 				}
 				else
 				{
 					tmp.name = readname + "+";
 					tmp.seq = it->second.first;
-					num = 2;
 				}
 			}
 			else // second mate being clipped
@@ -655,234 +335,290 @@ int extractor::dump_supply( const string& readname, const int flag, bool both_ma
 				{
 					tmp.name = readname + "-";
 					tmp.seq = reverse_complement( it->second.first );
-					num = 1;
 				}
 				else if ( !fr_flag )
 				{
 					tmp.name = readname + "+";
 					tmp.seq = it->second.second;
-					num = 1;
 				}
 				else
 				{
 					tmp.name = readname + "+";
 					tmp.seq = it->second.second;
-					num = 2;
 				}
 			}
 		}
+		return true;
 	}
 
-	return num;
+	return false;
 }
+
 /****************************************************************/
-
-extractor::cluster extractor::get_next_cluster() 
+void extractor::extract_reads()
 {
-
-	extractor::cluster next_cluster;
-	string readname;
-	
-	int max_c = 0, tmp_c = 0;
-	int count = 0;
-	
+	vector<pair<int, int>> bps;
+	string readname, cigar;
+	read cur_read;
+	int orphan_flag, oea_flag, chimera_flag;
+	int len;
+	int sc_loc = 0, start = 0;
+	int read_len = 9999999;
 	uint32_t flag;
 	uint32_t pos;
-	int orphan_flag, oea_flag, chimera_flag;
-
-	char ref[50];
 	uint32_t num_read  = 0;
-	uint32_t num_mappings  = 0;
-
-	read tmp;	
-	int t_loc;
-	int p_start = 0, p_end = 0, p_len = 0;
-	int add_read = 0 ;
-	bool is_spple;
+	char ref[50];
+	bool is_supple;
 	bool supple_found;
 	bool has_supple;
+	bool add_read;
+	bool cluster_found;
+	bool clipped;
 
-	while(1){
+	while(1)
+	{
 		if ( parser->hasNext() )
 		{
 
 			const Record &rc = parser->next();
-			is_spple = false;
+			is_supple = false;
 			supple_found = false;
 			has_supple = false;
-
-			add_read   = 0;
-
+			cluster_found = false;
+			add_read   = false;
 			flag     = rc.getMappingFlag();
+			bps.clear();
+			sc_loc = 0;
 
-			if ( flag < 256 ) // To-Do: include supplementary split-mapping as potential mapping locations
+			if ( flag < 256 ) 
 			{
 				orphan_flag  = (  (flag & 0xc) == 0xc); 
 				oea_flag     = ( ((flag & 0xc) == 0x4) || ((flag & 0xc) == 0x8) );
 				chimera_flag = ( (0 == (flag & 0xc)  ) && strncmp("=", rc.getPairChromosome(), 1) );
-
-				has_supple = has_supply_mapping( rc.getOptional() );
-				readname = string(rc.getReadName());
-
-				if ( has_supple )
-				{
-					auto it    = supply_dict.find(readname);
-					if ( it != supply_dict.end() )
-					{
-						if ( 0x40 == (flag&0x40) )
-						{
-							it->second.first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-						}
-						else
-						{
-							it->second.second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
-						}
-					}
-					else
-					{
-						if ( 0x40 == (flag&0x40) )
-						{
-							supply_dict[readname] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
-						}
-						else
-						{
-							supply_dict[readname] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
-						}
-					}
-				}
-
-				if ( !orphan_flag and !chimera_flag )
-				{
-					t_loc = 0; 
-					if ( oea_flag )
-					{
-						tmp_c = dump_oea( rc, tmp, t_loc, both_mates);
-					}
-					else
-					{
-						tmp_c = dump_mapping( rc, tmp, t_loc, 0.99, both_mates );			
-					}	
-					
-					if ( t_loc )
-					{
-						add_read = (both_mates) ? 2: 1;
-
-					}
-
-				}	
-			}
-			else if ( ( 0x800 == (flag & 0x800) ) )
-			{		
-				// supply_dict does not always include both mate, so we need to check to prevent including empty reads
 				
-				pos      = rc.getLocation();
-				t_loc 	 = pos;
-				is_spple = true;
+				if ( !orphan_flag )
+				{
+					has_supple = has_supply_mapping( rc.getOptional() );
+					readname = string(rc.getReadName());
 
-				// insert the hard-clipped mate itself
-				add_read  = dump_supply( string(rc.getReadName()), flag, both_mates, tmp);
-				if ( add_read )
-				{ 
-					supple_found = true;
+					if ( has_supple ){
+
+						auto it    = supply_dict.find(readname);
+						if ( it != supply_dict.end() ){
+							if ( 0x40 == (flag&0x40) ){
+								it->second.first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+							}
+							else{
+								it->second.second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+							}
+						}
+						else{
+							if ( 0x40 == (flag&0x40) ){
+								supply_dict[readname] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+							}
+							else{
+								supply_dict[readname] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+							}
+						}
+					}
 				}
 				else{
-					add_read = 1;
+					//orphan_clust.reads.push_back({string(rc.getReadName()), string(rc.getSequence())});
+				}
+
+				if ( !orphan_flag && !chimera_flag ){				
+
+					if ( oea_flag ){
+						//dump_oea( rc, cur_read, t_loc);
+					}
+					else{
+						dump_mapping( rc, cur_read, bps, clip_ratio );			
+					}	
+
+					if(!bps.empty()){
+						add_read = true;
+					}
+					else{
+
+					}
+					
+				}	
+			}
+			else if ( ( 0x800 == (flag & 0x800) ))
+			{		
+				// supply_dict does not always include both mate, so we need to check to prevent including empty reads				
+				sc_loc   = rc.getLocation();
+				cigar    = string(rc.getCigar());
+				is_supple = true;
+				int mapped = 0;
+
+				bps = extract_bp(cigar, mapped, sc_loc);
+
+				if(!bps.empty()){//} || mapped < 30){
+					// insert the hard-clipped mate itself
+					supple_found = dump_supply( string(rc.getReadName()), flag, cur_read);
+					add_read = true;
 				}
 			}
+
+			parser->readNextDiscordant();
 
 			if ( add_read )
 			{
- 
+
 				if(num_read == 0){
 					strncpy( ref,  rc.getChromosome(), 50);
-					next_cluster.reads.reserve(max_num_read);
+					cur_ref = string(ref);
 				}
+				num_read++;
 
-				if(is_spple && !supple_found){
-					next_cluster.sa_reads.push_back((sa_read){string(rc.getReadName()), flag});
-				}
-				else{
-					next_cluster.reads.push_back({tmp.name,tmp.seq});
-				}
+				if(!start)start = rc.getLocation();//sc_loc;
 
-				num_read++; 
-				num_mappings += add_read;
+				if(is_supple && !supple_found)cur_read.seq = "";
 
-				p_end = (t_loc > p_end) ? t_loc : p_end;
-				if ( !p_start ){p_start = t_loc;}
+				for(pair<int,int>& bp : bps){
 
-				if ( strncmp(ref, rc.getChromosome(), 50 ) || ( max_dist < t_loc - p_start)  || ( max_num_read < num_read))
-				{	
-					if ( num_read )
-					{
-						next_cluster.start = p_start;
-						next_cluster.end = p_end;
-						next_cluster.ref = string(ref);
+					sc_loc = bp.first;
+
+					if(bp.second > min_sc){
+						sorted_soft_clips.push_back({string(rc.getReadName()), cur_read.seq, flag, sc_loc});
+						break;
 					}
-
-					num_read    = 0;
-					num_mappings = 0;
-					p_len = p_end - p_start;
-					p_start     = 0;
-					p_end       = 0;
-					parser->readNextDiscordant();
-
-					if(p_len < min_dist){
-						vector<pair<string, string>>().swap(next_cluster.reads);
-						vector<sa_read>().swap(next_cluster.sa_reads);
-						strncpy( ref,  rc.getChromosome(), 50);
-						continue;
-					}
-					else{
-						if(next_cluster.sa_reads.size() > 0){
-							supple_clust.push_back(next_cluster);
-							vector<pair<string, string>>().swap(next_cluster.reads);
-							vector<sa_read>().swap(next_cluster.sa_reads);
-							strncpy( ref,  rc.getChromosome(), 50);
-							continue;
-						}
-						else{
-							break;
-						}
+				}
+			
+				if(strncmp(ref, rc.getChromosome(), 50 )){// || (rc.getLocation() - start) > max_dist){
+					start = 0;
+					num_read = 0;
+					if(!sorted_soft_clips.empty()){
+						index = sorted_soft_clips.size();
+						sort(sorted_soft_clips.begin(), sorted_soft_clips.end());
+						break;
 					}
 				}
 			}
-			
-			parser->readNextDiscordant();
 		}
 		else{
-
-			if(supple_clust.empty())break;
-
-			for(auto& read : supple_clust.back().sa_reads){
-
-				// insert the hard-clipped mate itself
-				add_read  = dump_supply( read.readname, read.flag, both_mates, tmp);
-
-				if ( add_read )
-				{
-
-					supple_clust.back().reads.push_back({tmp.name,tmp.seq});
-				}
-				else{
-					ERROR("Supplemental mappings %s are missing in SAM/BAM, file might be invalid\n", read.readname.c_str() );
-				}
+			if(!sorted_soft_clips.empty()){
+				index = sorted_soft_clips.size();
+				sort(sorted_soft_clips.begin(), sorted_soft_clips.end());
+				break;
 			}
-			
-			next_cluster = supple_clust.back(); //TODO think of way to avoid copy
-			supple_clust.pop_back();
-
-			break;
 		}
 	}
+}
 
-	return next_cluster;
+
+
+/****************************************************************/
+
+extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support) 
+{
+
+	if(!supple_clust.empty()){
+		supple_clust.pop_back();
+	}
+
+	if(index > 0){
+		int num_read = 0;
+		int c_start = 0;
+		extractor::cluster empty_cluster;
+		supple_clust.push_back(empty_cluster);
+
+		for(int i = sorted_soft_clips.size()-index; i < sorted_soft_clips.size(); i++){
+
+			sortable_read& sc_read = sorted_soft_clips[i];
+
+			num_read++;
+			
+			if( !c_start )c_start = sc_read.sc_loc;
+
+			if(uncertainty < abs(sc_read.sc_loc - c_start)){
+
+				if(num_read >= min_support)
+				{
+					supple_clust.back().start = c_start;
+					supple_clust.back().end = c_start;
+					supple_clust.back().ref = cur_ref;
+
+// if(cur_ref == "7" && c_start >= 55181160 && c_start <= 55181600){
+// 	cout << c_start << "\t" << num_read << endl;
+//  }
+// if(cur_ref == "7" && c_start > 55181600){
+//  	exit(0);
+//  }
+					if(supple_clust.back().sa_reads.size() > 0){
+						extractor::cluster empty_cluster;
+						supple_clust.push_back(empty_cluster);
+					}
+					else{
+						return supple_clust.back();
+					}	
+				}
+				else{
+					supple_clust.back().reads.clear();
+					supple_clust.back().sa_reads.clear();
+				}
+
+				c_start = 0;
+				num_read = 0;
+			}
+
+			if(sc_read.seq.empty()){
+				supple_clust.back().sa_reads.push_back((sa_read){sc_read.name, sc_read.flag});
+			}
+			else{
+				supple_clust.back().reads.push_back({sc_read.name, sc_read.seq});
+			}
+
+			index--;
+		}
+
+		sorted_soft_clips.clear();
+
+		if(supple_clust.back().sa_reads.size() > 0){
+			extractor::cluster empty_cluster;
+			supple_clust.push_back(empty_cluster);
+			return get_next_cluster(uncertainty, min_support); 
+		}
+		else{
+			return supple_clust.back();
+		}	
+
+	}
+	else if(parser->hasNext()){
+
+		extractor::cluster empty_cluster;
+		supple_clust.push_back(empty_cluster);
+
+		extract_reads();
+
+		return get_next_cluster(uncertainty, min_support); 
+	}	
+	else{
+
+		bool add_read;
+		read cur_read;
+
+		for(auto& read : supple_clust.back().sa_reads){
+
+			add_read = dump_supply( read.readname, read.flag, cur_read);
+
+			if (add_read){
+				supple_clust.back().reads.push_back({cur_read.name, cur_read.seq});
+			}
+			else{
+				ERROR("Supplemental mappings %s are missing in SAM/BAM, file might be invalid\n", read.readname.c_str() );
+			}
+		}
+		
+		return supple_clust.back();
+	}
 
 }
 
 bool extractor::has_next_cluster(){
 
-	return (parser->hasNext() || !supple_clust.empty());
+	return (parser->hasNext() || (supple_clust.size() > 1));
 }
 
 void extractor::clear_maps(){
