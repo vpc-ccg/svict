@@ -66,11 +66,12 @@ private:
 	int max_num_read;
 	double clip_ratio;
 	int index = 0;
+	const bool use_indel = true;
 
 private:
 	int parse_sc( const char *cigar, int &match_l, int &read_l );
 	bool has_supply_mapping( const char *attr );
-	vector<pair<int, int>> extract_bp(string& cigar, int& mapped, int sc_loc);
+	vector<pair<int, int>> extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel);
 	int dump_oea( const Record &rc, read &tmp, int &anchor_pos );
 	int dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio );
 	bool dump_supply( const string& readname, const int flag, read &tmp);

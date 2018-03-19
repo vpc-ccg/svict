@@ -63,7 +63,7 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 }
 
 /****************************************************************/
-vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_loc){	
+vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel){	
 
 	int len = 0;
 	vector<pair<int, int>> bps;
@@ -75,7 +75,7 @@ vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_
 			len +=  int(c - '0');
 		}
 		else{
-			if(c == 'S' || c == 'H' || c == 'I'){
+			if(c == 'S' || c == 'H' || (use_indel && c == 'I')){
 				bps.push_back({sc_loc,len});
 			}
 			else if(c == 'M'){
@@ -83,7 +83,7 @@ vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_
 				mapped += len;
 			}
 			else if(c == 'D' ){ 
-				bps.push_back({sc_loc,len});
+				if(use_indel)bps.push_back({sc_loc,len});
 				sc_loc += len;
 			}
 			len = 0;
@@ -227,7 +227,7 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>>
 				//if(mapped < 30)bps.clear();
 			}	
 
-			bps = extract_bp(cigar, mapped, sc_loc);
+			bps = extract_bp(cigar, mapped, sc_loc, use_indel);
 
 			if (flag & 0x10)
 			{ 	//mate has to be positive
@@ -374,6 +374,7 @@ void extractor::extract_reads()
 	bool add_read;
 	bool cluster_found;
 	bool clipped;
+	sorted_soft_clips.clear();
 
 	while(1)
 	{
@@ -452,7 +453,7 @@ void extractor::extract_reads()
 				is_supple = true;
 				int mapped = 0;
 
-				bps = extract_bp(cigar, mapped, sc_loc);
+				bps = extract_bp(cigar, mapped, sc_loc, use_indel);
 
 				if(!bps.empty()){//} || mapped < 30){
 					// insert the hard-clipped mate itself
@@ -460,9 +461,7 @@ void extractor::extract_reads()
 					add_read = true;
 				}
 			}
-
-			parser->readNextDiscordant();
-
+			
 			if ( add_read )
 			{
 
@@ -480,13 +479,13 @@ void extractor::extract_reads()
 
 					sc_loc = bp.first;
 
-					if(bp.second > min_sc){
+					if(bp.second >= min_sc){
 						sorted_soft_clips.push_back({string(rc.getReadName()), cur_read.seq, flag, sc_loc});
 						break;
 					}
 				}
-			
-				if(strncmp(ref, rc.getChromosome(), 50 )){// || (rc.getLocation() - start) > max_dist){
+
+				if(strncmp(ref, rc.getChromosome(), 50 )){
 					start = 0;
 					num_read = 0;
 					if(!sorted_soft_clips.empty()){
@@ -496,6 +495,9 @@ void extractor::extract_reads()
 					}
 				}
 			}
+
+			parser->readNextDiscordant();
+
 		}
 		else{
 			if(!sorted_soft_clips.empty()){
@@ -519,6 +521,8 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 	}
 
 	if(index > 0){
+		int pos_count;
+		int cur_pos = -1;
 		int num_read = 0;
 		int c_start = 0;
 		extractor::cluster empty_cluster;
@@ -527,6 +531,22 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 		for(int i = sorted_soft_clips.size()-index; i < sorted_soft_clips.size(); i++){
 
 			sortable_read& sc_read = sorted_soft_clips[i];
+			pos_count = 0;
+
+			if(cur_pos != sc_read.sc_loc){
+				while(i+pos_count+1 < sorted_soft_clips.size() && sc_read.sc_loc == sorted_soft_clips[i+pos_count+1].sc_loc){
+					pos_count++;
+				}
+
+				if(pos_count < min_support){
+					i += pos_count;
+					index -= (pos_count+1);
+					continue;
+				}
+				else{
+					cur_pos = sc_read.sc_loc;
+				}
+			}
 
 			num_read++;
 			
@@ -534,30 +554,23 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 
 			if(uncertainty < abs(sc_read.sc_loc - c_start)){
 
-				if(num_read >= min_support)
-				{
-					supple_clust.back().start = c_start;
-					supple_clust.back().end = c_start;
-					supple_clust.back().ref = cur_ref;
-
+				supple_clust.back().start = c_start;
+				supple_clust.back().end = c_start;
+				supple_clust.back().ref = cur_ref;
+//if(c_start >= 136496660 && c_start <= 136506660)cerr << "========== " << c_start << " " << sc_read.sc_loc << " " << num_read << " " << index << endl;
 // if(cur_ref == "7" && c_start >= 55181160 && c_start <= 55181600){
-// 	cout << c_start << "\t" << num_read << endl;
+// 	//cout << c_start << "\t" << num_read << endl;
 //  }
 // if(cur_ref == "7" && c_start > 55181600){
 //  	exit(0);
 //  }
-					if(supple_clust.back().sa_reads.size() > 0){
-						extractor::cluster empty_cluster;
-						supple_clust.push_back(empty_cluster);
-					}
-					else{
-						return supple_clust.back();
-					}	
+				if(supple_clust.back().sa_reads.size() > 0){
+					extractor::cluster empty_cluster;
+					supple_clust.push_back(empty_cluster);
 				}
 				else{
-					supple_clust.back().reads.clear();
-					supple_clust.back().sa_reads.clear();
-				}
+					return supple_clust.back();
+				}	
 
 				c_start = 0;
 				num_read = 0;
@@ -572,8 +585,6 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 
 			index--;
 		}
-
-		sorted_soft_clips.clear();
 
 		if(supple_clust.back().sa_reads.size() > 0){
 			extractor::cluster empty_cluster;

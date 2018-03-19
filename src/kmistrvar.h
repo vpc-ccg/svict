@@ -26,11 +26,9 @@ private:
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -1719;//1357;//8562;
-	const int REPEAT_LIMIT1 = 6;   //distant 5
-	const int REPEAT_LIMIT2 = 50;  //close
-	const int REPEAT_LIMIT3 = 400; //total 400
-	const int CON_REPEAT_LIMIT = 20;//2;
+	const int CON_NUM_DEBUG = -1435;//411//2034;//1357;//8562;
+	const int REPEAT_LIMIT = 1;
+	const int CON_REPEAT_LIMIT = 100;//20;//2;
 	const int ANCHOR_SIZE = 40;
 	const bool USE_ANNO = true;
 	const bool PRINT_READS = false;
@@ -41,10 +39,25 @@ private:
 	const vector<string> sv_types = {"INV", "INS", "DEL", "DUP", "TRANS", "BND"};
 	const short INV = 0; const short INS = 1; const short DEL = 2; const short DUP = 3; const short TRANS = 4; const short BND = 5; const short INSL = 6; const short INSR = 7; 
 
+	struct contig_metrics{
+		double num_reads;
+		double len;
+		double max_dist;
+	};
+
 	struct mapping{
 		long loc;// : 29; 
 		int len;// : 14;  // up to 16,383
 		int con_loc;// : 14;
+#if GCC_VERSION == 4080
+		bool operator<( const mapping& rhs) const{  //To address known GCC 4.8 bug
+			return this->len > rhs.len;
+		}
+#else 
+		bool operator<( const mapping& rhs){
+			return this->len > rhs.len;
+		}
+#endif
 	};
 
 	struct mapping_ext{
@@ -55,6 +68,15 @@ private:
 		int con_loc;
 		int con_id;
 		int id;
+#if GCC_VERSION == 4080
+		bool operator<( const mapping_ext& rhs) const{  //To address known GCC 4.8 bug
+			return this->len > rhs.len;
+		}
+#else 
+		bool operator<( const mapping_ext& rhs){
+			return this->len > rhs.len;
+		}
+#endif
 	};
 
 	struct sortable_mapping{
@@ -101,6 +123,7 @@ private:
 
 	vector<contig> all_contigs; // 10% of memory
 	vector<compressed_contig> all_compressed_contigs; 
+	vector<contig_metrics> all_contig_metrics;
 	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
 	vector<last_interval>** last_intervals;
@@ -112,12 +135,15 @@ private:
 	map <string,vector<isoform>> iso_gene_map;
 	map <string,vector<gene_data>> gene_sorted_map;
 	unsigned long long kmer_mask;
+	unsigned long long num_kmer;
+	double rate_param;
 	bool** valid_mappings;
 	int* contig_kmers_index;  // 35% of memeory at k=14
-	unsigned long long num_kmer;
 	int k;
 	int num_intervals;
 	int u_ids;
+
+bool TP[14000];
 
 public:
 
@@ -136,7 +162,8 @@ private:
 	void print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
-	void assemble(int min_support, int max_support, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio);
+	void assemble(int min_support, int max_support, int uncertainty, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio);
+	void probalistic_filter();
 	void index();
 	void generate_intervals(const string &out_vcf, const bool LOCAL_MODE);
 	void generate_intervals_bwa(const string &sam_file, const bool LOCAL_MODE);

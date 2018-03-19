@@ -39,31 +39,38 @@ bool assembler::validate(const string &a, const string &b, int sz)
 
 vector<contig> assembler::assemble(vector<pair<string, string>>& reads) 
 {
-
 	auto lens = set<int>();
-	for (auto &r: reads) {
+	for (auto &r: reads){
 		lens.insert(r.second.size());
 	}
 
-	auto s = set<string>(), R = set<string>();
+	auto s = set<string>(), allR = set<string>(), R = set<string>();
 	unordered_map<string, string> RN = unordered_map<string, string>();
-/*	for (auto &r: reads) {
-		for (int i = 0; i < r.size(); i++) {
-			for (auto rl: lens) {
-				if (i + rl >= r.size()) break;
-				s.insert(r.substr(i, rl));
-			}
-		}
-	}*/
+	unordered_map<string, vector<Read>> subreads = unordered_map<string, vector<Read>>();
+	vector<string> read_seqs = vector<string>();
 
 	for (auto &r: reads) {
-		//if (s.find(r) == s.end()) {
-			R.insert(r.second);
-			RN[r.second] = r.first;	
-		//	s.insert(r);
-		//}
+		allR.insert(r.second);
+		RN[r.second] = r.first;	
 	}
-	vector<string> read_seqs = vector<string>(R.begin(), R.end());
+
+	// Handle nested reads as "subreads"
+	for (auto &r1: allR) {
+		bool found = false;
+		for (auto &r2: allR) {
+			if(r2.size() > r1.size()){
+				for (int i = 0; i < r2.size()-r1.size()+1; i++) {
+					if(r1 == r2.substr(i, r1.size())){
+						subreads[r2].push_back({RN[r1], r1, 0, i});
+						found = true;
+						break;
+					}
+				}
+				if(found)break;
+			}
+		}
+		if(!found)read_seqs.push_back(r1);
+	}
 
 	int min_len = *lens.begin();
 	int max_len = *lens.rbegin();
@@ -99,6 +106,18 @@ vector<contig> assembler::assemble(vector<pair<string, string>>& reads)
 
 	auto result = path();
 	//E("After assembly");
+
+	for(auto& contig : result){
+		int num_reads = contig.read_information.size();
+		for(int i = 0; i < num_reads; i++){
+			if(!subreads[contig.read_information[i].seq].empty()){
+				for(auto& read : subreads[contig.read_information[i].seq]){
+					read.location_in_contig += contig.read_information[i].location_in_contig;
+					contig.read_information.push_back(read);
+				}
+			}
+		}
+	}
 
 	return result;
 }
