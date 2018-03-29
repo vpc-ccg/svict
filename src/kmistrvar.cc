@@ -1890,7 +1890,7 @@ cur_debug_id = j;
 		//====================================
 
 		//vector<vector<int>> paths2 = fordFulkerson(id+1, contig_graph, 0, id); //TODO!!!!! do not generate paths that do not contain anchors
-		vector<pair<vector<int>, int>> paths = dijkstra(id+1, contig_graph2, 0, id, 5);
+		vector<pair<vector<int>, int>> paths = dijkstra(id+1, contig_graph, 0, id, 5);
 
 
 
@@ -2246,7 +2246,7 @@ if(j == CON_NUM_DEBUG){
 
 	for(int i=0; i <= id; i++){
 		for(int j=0; j <= id; j++){
-			cerr << contig_graph2[i][j] << ", ";
+			cerr << contig_graph[i][j] << ", ";
 		}
 		cerr << endl;
 	}
