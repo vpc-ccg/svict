@@ -26,8 +26,10 @@ private:
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -1435;//411//2034;//1357;//8562;
-	const int REPEAT_LIMIT = 1;
+	const int CON_NUM_DEBUG = -1314;//566; //INS;//1105 //YX;//411//2034;//1357;//8562;
+	int cur_debug_id = 0;
+	const int REPEAT_LIMIT = 2;
+	const int PATH_LIMIT = 2;
 	const int CON_REPEAT_LIMIT = 100;//20;//2;
 	const int ANCHOR_SIZE = 40;
 	const bool USE_ANNO = true;
@@ -38,6 +40,12 @@ private:
 	const vector<string> contexts = {"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
 	const vector<string> sv_types = {"INV", "INS", "DEL", "DUP", "TRANS", "BND"};
 	const short INV = 0; const short INS = 1; const short DEL = 2; const short DUP = 3; const short TRANS = 4; const short BND = 5; const short INSL = 6; const short INSR = 7; 
+
+	struct pair_hash {
+		inline std::size_t operator()(const std::pair<long,char> & v) const {
+			return v.first*31+v.second;
+		}
+	};
 
 	struct contig_metrics{
 		double num_reads;
@@ -106,6 +114,12 @@ private:
 		unsigned short repeat;	//8
 	};
 
+	struct treeNode{
+		vector<pair<int,int>> ancestors;
+		unordered_map<int, treeNode*> children;
+		int v;
+	};
+
 	struct result{
 
 		string ref_seq;
@@ -127,7 +141,7 @@ private:
 	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
 	vector<last_interval>** last_intervals;
-	tsl::sparse_map<long, vector<result>>** results;
+	unordered_map<long, vector<result>>** results;
 	vector<pair<int,char>> cluster_info;
 	vector<vector<int>> contig_kmers;
 	vector<int> contig_kmer_counts;
@@ -170,6 +184,10 @@ private:
 	void predict_variants(const string &out_vcf, int uncertainty, int min_length, int max_length);
 	bool bfs(const int DEPTH, int** rGraph, int s, int t, int parent[]);
 	vector<vector<int>> fordFulkerson(const int DEPTH, int** rGraph, int s, int t);
+	int minDistance(const int DEPTH, int dist[], bool sptSet[]);
+	void getPath(vector<int>& path, int dist[], int parent[], int j);
+	pair<vector<pair<int,int>>,int> findNextPath(const int DEPTH, int** graph, treeNode* node, vector<pair<int,int>> ancestors, int dist[], int parent[]);
+	vector<pair<vector<int>, int>> dijkstra(const int DEPTH, int** graph, int s, int t, int max_paths);
 	
 public:
 	

@@ -36,6 +36,12 @@ struct Node {
 	Node(): indegree(0) {}
 };
 
+struct compare {
+    bool operator()(const string& first, const string& second) {
+        return first.size() > second.size();
+    }
+};
+
 typedef vector<Node> Graph;
 
 class assembler {

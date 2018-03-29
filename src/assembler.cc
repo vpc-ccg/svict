@@ -39,25 +39,27 @@ bool assembler::validate(const string &a, const string &b, int sz)
 
 vector<contig> assembler::assemble(vector<pair<string, string>>& reads) 
 {
-	auto lens = set<int>();
+	int min_len = 999999;
+	int max_len = 0;
 	for (auto &r: reads){
-		lens.insert(r.second.size());
+		if(r.second.size() < min_len)min_len = r.second.size();
+		if(r.second.size() > max_len)max_len = r.second.size();
 	}
 
-	auto s = set<string>(), allR = set<string>(), R = set<string>();
+	auto R = set<string>();
 	unordered_map<string, string> RN = unordered_map<string, string>();
 	unordered_map<string, vector<Read>> subreads = unordered_map<string, vector<Read>>();
 	vector<string> read_seqs = vector<string>();
 
 	for (auto &r: reads) {
-		allR.insert(r.second);
+		R.insert(r.second);
 		RN[r.second] = r.first;	
 	}
 
 	// Handle nested reads as "subreads"
-	for (auto &r1: allR) {
+	for (auto &r1: R) {
 		bool found = false;
-		for (auto &r2: allR) {
+		for (auto &r2: R) {
 			if(r2.size() > r1.size()){
 				for (int i = 0; i < r2.size()-r1.size()+1; i++) {
 					if(r1 == r2.substr(i, r1.size())){
@@ -72,8 +74,78 @@ vector<contig> assembler::assemble(vector<pair<string, string>>& reads)
 		if(!found)read_seqs.push_back(r1);
 	}
 
-	int min_len = *lens.begin();
-	int max_len = *lens.rbegin();
+	//New code ====================================
+	// set<string, compare> allR = set<string, compare>();
+	// vector<unordered_map<string,vector<int>>> phashes;
+	// vector<unordered_map<string,vector<int>>> shashes;
+	// string p,s;
+	// int diff = max_len-min_len;
+	// int k = 23;
+	// int id2 = 0;
+
+	// for (auto &r: reads) {
+	// 	allR.insert(r.second);
+	// 	RN[r.second] = r.first;	
+	// }
+
+	// vector<bool> found = vector<bool>(allR.size(), false);
+
+	// for (auto &r1: allR) {
+
+	// 	if(found[id2++])continue;
+
+	// 	unordered_map<string,vector<int>> ph;
+	// 	unordered_map<string,vector<int>> sh;
+	// 	int id1 = 0;
+	// 	int dist;
+
+	// 	for(int i = 0; i < diff-k && i+k < r1.size(); i++){
+	// 		ph[r1.substr(i, k)].push_back(i);
+	// 		sh[r1.substr(r1.size()-k-i, k)].push_back(i);
+	// 	}
+	// 	phashes.push_back(ph);
+	// 	shashes.push_back(sh);
+
+	// 	p = r1.substr(0, k);
+	// 	s = r1.substr(r1.size()-k, k);
+
+	// 	for (auto &r2: allR) {
+	// 		if(r2.size() > r1.size()){
+	// 			if(!found[id1]){
+	// 				if(phashes[id1].find(p) != phashes[id1].end() && shashes[id1].find(s) != shashes[id1].end()){
+	// 					vector<int>& pos1 = phashes[id1][p];
+	// 					vector<int>& pos2 = shashes[id1][s];
+	// 					int i = 0;
+	// 					int j = 0;
+
+	// 					for(i; i < pos1.size(); i++){
+	// 						for(j; j < pos2.size(); j++){
+	// 							dist = j-i;
+	// 							if(dist > r1.size())break;
+	// 							if(dist == r1.size()){
+	// 								subreads[r2].push_back({RN[r1], r1, 0, i});
+	// 								found[id1] = true;
+	// 								break;
+	// 							}
+	// 						}
+	// 						if(j == pos2.size() || found[id1])break;
+	// 					}
+	// 					if(found[id1])break;
+	// 				}
+	// 			}
+	// 		}
+	// 		else{
+	// 			break;
+	// 		}
+	// 		id1++;
+	// 	}
+
+	// 	if(!found[id1])read_seqs.push_back(r1);
+	// }
+
+	// sort(read_seqs.begin(), read_seqs.end());
+
+	//===============================================
 
 	vector<unordered_map<int, vector<int>>> phash(max_len), shash(max_len);
 	graph = Graph(read_seqs.size());

@@ -41,9 +41,9 @@ kmistrvar::kmistrvar(int kmer_len, const int anchor_len, const string &input_fil
 		last_intervals[rc] = new vector<last_interval>[25];
 	}
 
-	results = new tsl::sparse_map<long, vector<result>>*[6];
+	results = new unordered_map<long, vector<result>>*[6];
 	for(int sv=0; sv < sv_types.size(); sv++){
-		results[sv] = new tsl::sparse_map<long, vector<result>>[25];
+		results[sv] = new unordered_map<long, vector<result>>[25];
 	}
 
 	init();
@@ -74,7 +74,7 @@ void kmistrvar::init(){
 
 	for(int sv=0; sv < sv_types.size(); sv++){
 		for(int chr=0; chr < chromos.size(); chr++){
-			results[sv][chr] = tsl::sparse_map<long, vector<result>>();
+			results[sv][chr] = unordered_map<long, vector<result>>();
 		}
 	}
 }
@@ -451,7 +451,8 @@ long kmistrvar::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type,
 
 void kmistrvar::print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 
-	long loc, start, end;
+	long loc, ploc, start, end;
+	char pchr;
 	string best_gene1 = "", best_name1 = "", best_trans1 = "", context1 = "";
 	string best_gene2 = "", best_name2 = "", best_trans2 = "", context2 = "";
 	string best_gene3 = "", best_name3 = "", best_trans3 = "", context3 = "";
@@ -474,6 +475,7 @@ int not_bnd_count = 0;
 
 				loc = result_pair.first;
 				unordered_set<long> clusters;
+				unordered_set<pair<long,char>, pair_hash> pairs; 
 				unordered_set<int> contigs;
 				filter = "PASS";
 				c.sup = 0;
@@ -482,10 +484,10 @@ int not_bnd_count = 0;
 				if(result_pair.second.empty())continue;
 
 				for(auto& r : result_pair.second){
-
 					if(r.end != c.end && r.sup > c.sup){
-
 						c = r;
+						pairs.clear();
+						pairs.insert({r.pair_loc, r.pair_chr});
 
 						clusters.clear();
 						clusters.insert(r.clust);
@@ -493,16 +495,16 @@ int not_bnd_count = 0;
 						contigs.clear();
 						contigs.insert(r.con);
 					}
-					else if(r.end == c.end || r.pair_loc > 0){
-
+					else if(r.end == c.end || r.pair_loc > 0 || r.pair_chr != c.pair_chr){
 						clusters.insert(r.clust);
 						contigs.insert(r.con);
 						c.sup += r.sup;
 
-						if(r.pair_loc != 0){
-							c.pair_loc = r.pair_loc;
-							c.pair_chr = r.pair_chr;
-						}					
+					//	if(r.pair_loc != 0){
+							pairs.insert({r.pair_loc, r.pair_chr});
+							// c.pair_loc = r.pair_loc;
+							// c.pair_chr = r.pair_chr;
+					//	}					
 					}
 
 					if(PRINT_READS){
@@ -540,209 +542,214 @@ int not_bnd_count = 0;
 					contig_ids = to_string(contigs.size());
 				}
 
-				if(c.pair_loc == 0 || c.pair_loc == loc || (c.pair_loc > 0 && (results[sv][c.pair_chr].find(c.pair_loc) == results[sv][c.pair_chr].end()))){ //TODO deal with this last case
+				for(auto& p : pairs){
 
-					if(c.one_bp)filter = "TWO_BP"; //Counter-intuitive I think, but rules are rules
+					ploc = p.first;
+					pchr = p.second;
 
-					if(USE_ANNO){
-						locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
-						context1 = contexts[vec_best1[0]];
-						locate_interval(chromos[c.pair_chr], c.end, c.end, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
-						context2 = contexts[vec_best2[0]];
-						locate_interval(chromos[chr], loc, c.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_name3, best_trans3, vec_best3);
-						context3 = contexts[vec_best3[0]];
+					if(ploc == 0 || ploc == loc || (ploc > 0 && (results[sv][pchr].find(ploc) == results[sv][pchr].end()))){ //TODO deal with this last case
 
-
-						anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1  + ";ANNOC=" + context3 + "," + best_gene3 + "," + best_trans3 + "," + best_name3 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
-
-						if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
-						
-					}
-
-					if(sv == TRANS){
-
-						if(c.info == "left_bp"){
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\tN\t.N\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), (loc+1), c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-						}
-						else if(c.info == "right_bp"){
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\tN\tN.\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), loc, c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-						}
-						else{
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), (c.end + c.alt_seq.length()), c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-						}
-					}
-					else{
-
-						start = loc;
-						end = c.end;
-
-						// If it's more than uncertainty it's better to print it so we know something is wrong
-						if(abs(c.end-loc) <= uncertainty){
-							start = min(loc, c.end);
-							end = max(loc, c.end);
-						}
-
-						fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\t%s\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-							chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), filter.c_str(), type.c_str(), c.info.c_str(), end, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str());
-					}
-				}
-				else if(c.pair_loc > 0){
-
-					unordered_set<long> clusters;
-					unordered_set<int> contigs;
-					cp.sup = 0;
-					cp.end = 0;
-
-					for(result& r : results[sv][c.pair_chr][c.pair_loc]){
-
-						if(r.pair_loc < 0){
-
-							if(r.end != cp.end && r.sup > cp.sup){
-
-								cp = r;
-
-								clusters.clear();
-								clusters.insert(r.clust);
-
-								contigs.clear();
-								contigs.insert(r.con);
-							}
-							else if(r.end == cp.end){
-								clusters.insert(r.clust);
-								contigs.insert(r.con);
-								cp.sup += r.sup;
-								
-							}
-						}
-					}
-
-					cluster_ids_pair = "";
-					contig_ids_pair = "";
-
-					if(clusters.empty() || contigs.empty()){
-						cerr << "ERROR: Invalid two contig call of type " << type << ": " << chromos[chr] << ":" << loc << " ploc " << chromos[c.pair_chr] << ":" << c.pair_loc  << endl;	
-						continue;
-					}
-
-					if(PRINT_READS){
-						for(auto& clust : clusters) {
-							cluster_ids_pair = cluster_ids_pair + to_string(clust) + ",";
-						}  
-
-						for(auto& con : contigs) {
-							contig_ids_pair = contig_ids_pair + to_string(con) + ",";
-						}   
-
-						cluster_ids_pair.resize(cluster_ids_pair.length()-1);
-						contig_ids_pair.resize(contig_ids_pair.length()-1);
-					}
-					else{
-						cluster_ids_pair = to_string(clusters.size());
-						contig_ids_pair = to_string(contigs.size());
-					}
-
-					// int loc1 == m1.loc + m1.len  == loc
-					// int loc2 == m2.loc			== c.end
-					// int end1 == m4.loc			== cp.end
-					// int end2 == m3.loc+m3.len    == c.pair_loc 
-
-					if(sv == TRANS){
-bnd_count++;
-
-						if(USE_ANNO){
-							locate_interval(chromos[chr], loc, cp.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
-							context1 = contexts[vec_best1[0]];
-							locate_interval(chromos[c.pair_chr], c.end, c.pair_loc, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
-							context2 = contexts[vec_best2[0]];
-
-							anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
-
-							if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
-
-						}
-
-						if(abs(cp.end-loc) <= uncertainty){
-							info = ":INS";
-							if(abs(c.end-c.pair_loc) <= uncertainty)continue; //1 FP
-						}
-						else{
-							if(abs(c.end-c.pair_loc) <= uncertainty){
-								info = ":DEL";
-							}
-							else{
-								info = ":SWAP";
-							}
-						}
-
-						fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t%s[%s:%d[\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-							chromos[chr].c_str(), loc, c.con, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.end, info.c_str(), cp.con, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-
-						if(USE_ANNO)anno = "ANNOL=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2 + ";ANNOR=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1; 
-
-						fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t]%s:%d]%s\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-							chromos[chr].c_str(), cp.end, cp.con, cp.ref_seq.c_str(), chromos[c.pair_chr].c_str(), c.pair_loc, cp.ref_seq.c_str(), info.c_str(), c.con, cluster_ids_pair.c_str(), contig_ids_pair.c_str(), cp.sup, anno.c_str()); 
-					}
-					else{
-not_bnd_count++;
+						if(c.one_bp)filter = "TWO_BP"; //Counter-intuitive I think, but rules are rules
 
 						if(USE_ANNO){
 							locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
 							context1 = contexts[vec_best1[0]];
-							locate_interval(chromos[c.pair_chr], c.pair_loc, c.pair_loc, gene_sorted_map[chromos[c.pair_chr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
+							locate_interval(chromos[pchr], c.end, c.end, gene_sorted_map[chromos[pchr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
 							context2 = contexts[vec_best2[0]];
-							locate_interval(chromos[chr], loc, c.pair_loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_name3, best_trans3, vec_best3);
+							locate_interval(chromos[chr], loc, c.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_name3, best_trans3, vec_best3);
 							context3 = contexts[vec_best3[0]];
 
-							anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1  + ";ANNOC=" + context3 + "," + best_gene3 + "," + best_trans3 + "," + best_name3 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
-							
-							if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
 
+							anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1  + ";ANNOC=" + context3 + "," + best_gene3 + "," + best_trans3 + "," + best_name3 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
+
+							if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
 							
+						}
+
+						if(sv == TRANS){
+
+							if(c.info == "left_bp"){
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+									chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), c.end, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\tN\t.N\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+									chromos[chr].c_str(), (loc+1), c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+							}
+							else if(c.info == "right_bp"){
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\tN\tN.\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+									chromos[chr].c_str(), loc, c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+									chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[pchr].c_str(), c.end, c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+							}
+							else{
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+									chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), c.end, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+									chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[pchr].c_str(), (c.end + c.alt_seq.length()), c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+							}
+						}
+						else{
+
+							start = loc;
+							end = c.end;
+
+							// If it's more than uncertainty it's better to print it so we know something is wrong
+							if(abs(c.end-loc) <= uncertainty){
+								start = min(loc, c.end);
+								end = max(loc, c.end);
+							}
+
+							fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\t%s\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), filter.c_str(), type.c_str(), c.info.c_str(), end, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str());
+						}
+					}
+					else if(ploc > 0){
+
+						unordered_set<long> clusters;
+						unordered_set<int> contigs;
+						cp.sup = 0;
+						cp.end = 0;
+
+						for(result& r : results[sv][p.second][ploc]){
+
+							if(r.pair_loc < 0){
+
+								if(r.end != cp.end && r.sup > cp.sup){
+
+									cp = r;
+
+									clusters.clear();
+									clusters.insert(r.clust);
+
+									contigs.clear();
+									contigs.insert(r.con);
+								}
+								else if(r.end == cp.end){
+									clusters.insert(r.clust);
+									contigs.insert(r.con);
+									cp.sup += r.sup;
+									
+								}
+							}
+						}
+
+						cluster_ids_pair = "";
+						contig_ids_pair = "";
+
+						if(clusters.empty() || contigs.empty()){
+							cerr << "ERROR: Invalid two contig call of type " << type << ": " << chromos[chr] << ":" << loc << " ploc " << chromos[pchr] << ":" << ploc  << endl;	
+							continue;
 						}
 
 						if(PRINT_READS){
-							cluster_ids += "," + cluster_ids_pair;
-							contig_ids += "," + contig_ids_pair;
+							for(auto& clust : clusters) {
+								cluster_ids_pair = cluster_ids_pair + to_string(clust) + ",";
+							}  
+
+							for(auto& con : contigs) {
+								contig_ids_pair = contig_ids_pair + to_string(con) + ",";
+							}   
+
+							cluster_ids_pair.resize(cluster_ids_pair.length()-1);
+							contig_ids_pair.resize(contig_ids_pair.length()-1);
 						}
 						else{
-							cluster_ids = to_string(stoi(cluster_ids) + stoi(cluster_ids_pair));
-							contig_ids = to_string(stoi(contig_ids) + stoi(contig_ids_pair));
+							cluster_ids_pair = to_string(clusters.size());
+							contig_ids_pair = to_string(contigs.size());
 						}
 
-						if(sv == INV || sv == INS){
-							start = loc;
-							end = cp.end;
+						// int loc1 == m1.loc + m1.len  == loc
+						// int loc2 == m2.loc			== c.end
+						// int end1 == m4.loc			== cp.end
+						// int end2 == m3.loc+m3.len    == c.pair_loc 
+
+						if(sv == TRANS){
+	bnd_count++;
+
+							if(USE_ANNO){
+								locate_interval(chromos[chr], loc, cp.end, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
+								context1 = contexts[vec_best1[0]];
+								locate_interval(chromos[pchr], c.end, ploc, gene_sorted_map[chromos[pchr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
+								context2 = contexts[vec_best2[0]];
+
+								anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
+
+								if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
+
+							}
 
 							if(abs(cp.end-loc) <= uncertainty){
-								start = min(loc, c.pair_loc);
-								end = max(loc, cp.end);
+								info = ":INS";
+								if(abs(c.end-ploc) <= uncertainty)continue; //1 FP
 							}
+							else{
+								if(abs(c.end-ploc) <= uncertainty){
+									info = ":DEL";
+								}
+								else{
+									info = ":SWAP";
+								}
+							}
+
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t%s[%s:%d[\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), loc, c.con, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), c.end, info.c_str(), cp.con, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+
+							if(USE_ANNO)anno = "ANNOL=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2 + ";ANNOR=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1; 
+
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t]%s:%d]%s\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), cp.end, cp.con, cp.ref_seq.c_str(), chromos[pchr].c_str(), ploc, cp.ref_seq.c_str(), info.c_str(), c.con, cluster_ids_pair.c_str(), contig_ids_pair.c_str(), cp.sup, anno.c_str()); 
 						}
 						else{
-							start = loc;
-							end = c.pair_loc;
+	not_bnd_count++;
 
-							// If it's more than uncertainty it's better to print it so we know something is wrong
-							if(abs(c.pair_loc-loc) <= uncertainty){
-								start = min(loc, c.pair_loc);
-								end = max(loc, c.pair_loc);
+							if(USE_ANNO){
+								locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
+								context1 = contexts[vec_best1[0]];
+								locate_interval(chromos[pchr], ploc, ploc, gene_sorted_map[chromos[pchr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
+								context2 = contexts[vec_best2[0]];
+								locate_interval(chromos[chr], loc, ploc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_name3, best_trans3, vec_best3);
+								context3 = contexts[vec_best3[0]];
+
+								anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1  + ";ANNOC=" + context3 + "," + best_gene3 + "," + best_trans3 + "," + best_name3 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
+								
+								if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
+								
 							}
+
+							if(PRINT_READS){
+								cluster_ids += "," + cluster_ids_pair;
+								contig_ids += "," + contig_ids_pair;
+							}
+							else{
+								cluster_ids = to_string(stoi(cluster_ids) + stoi(cluster_ids_pair));
+								contig_ids = to_string(stoi(contig_ids) + stoi(contig_ids_pair));
+							}
+
+							if(sv == INV || sv == INS){
+								start = loc;
+								end = cp.end;
+
+								if(abs(cp.end-loc) <= uncertainty){
+									start = min(loc, ploc);
+									end = max(loc, cp.end);
+								}
+							}
+							else{
+								start = loc;
+								end = ploc;
+
+								// If it's more than uncertainty it's better to print it so we know something is wrong
+								if(abs(ploc-loc) <= uncertainty){
+									start = min(loc, ploc);
+									end = max(loc, ploc);
+								}
+							}
+							
+							fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\tPASS\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+								chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), type.c_str(), c.info.c_str(),  end, cluster_ids.c_str(), contig_ids.c_str(), (c.sup+cp.sup), anno.c_str());
+							
 						}
-						
-						fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\tPASS\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-							chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), type.c_str(), c.info.c_str(),  end, cluster_ids.c_str(), contig_ids.c_str(), (c.sup+cp.sup), anno.c_str());
-						
-					}
-				}
+					}// pair_loc > 0
+				}//pairs
 			}
 		}
 	}
@@ -775,15 +782,15 @@ cerr << endl;
 begin = clock();
 }
 
-	probalistic_filter();
+	//probalistic_filter();
 
-if(PRINT_STATS){
-end = clock();
-elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-cerr << "PROBABILISTIC FILTER TIME: " << elapsed_secs << endl;
-cerr << endl;
-begin = clock();
-}
+// if(PRINT_STATS){
+// end = clock();
+// elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+// cerr << "PROBABILISTIC FILTER TIME: " << elapsed_secs << endl;
+// cerr << endl;
+// begin = clock();
+// }
 
 	index();
 
@@ -823,15 +830,18 @@ void kmistrvar::assemble( int min_support, int max_support, int uncertainty, con
 {
 	
 	vector<contig> contigs;
+	vector<contig> last_contigs;
 	compressed_contig con;
 	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio);
 	double sum = 0;
 	double count = 0;
+
+//########### Read TP ##############
 //FILE *writer = fopen("all.contigs.merged.reads", "wb");
 
-for(int i = 0; i < 14000; i++){
-	TP[i] = false;
-}
+// for(int i = 0; i < 14000; i++){
+// 	TP[i] = false;
+// }
 
 // string line;
 // ifstream myfile ("TP.contigs");
@@ -867,7 +877,7 @@ int read_count = 0;
 			break;
 		}
 
-		extractor::cluster p = ext.get_next_cluster(uncertainty, min_support); //5, 2 for sim  10,30  or 5, 200
+		extractor::cluster p = ext.get_next_cluster(uncertainty, min_support); //5, 2 for sim, 5,50 for 2     10,30  or 5, 200
 
 		if (!p.reads.size() || p.reads.size() > 5000) //Temporary threshold until optimizations are finished. 
 			continue;
@@ -886,6 +896,17 @@ if(PRINT_STATS){
 	part_count++;
 	contig_count1 += contigs.size(); 	
 }
+	
+		//Remove duplicates
+		for(auto &contig: contigs){
+			if (contig.support() >= min_support && contig.support() <= max_support && contig.data.size() <= MAX_ASSEMBLY_RANGE*2 ){
+				for(auto &last_contig: last_contigs){
+					if(contig.support() == last_contig.support() && contig.data == last_contig.data){
+						contig.read_information.clear();
+					}
+				}
+			}
+		}
 		
 
 		for (auto &contig: contigs){ 
@@ -904,57 +925,66 @@ if(PRINT_STATS){
 	contig_count2++; 
 	support_count += contig.support();	
 
-	if(p.start == 45329899){
-		//cout << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << all_contig_metrics.size() << endl;
-		//cout << contig.data << endl;
+	if(p.start == -38304880){
+		cerr << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << all_contig_metrics.size() << " " << p.ref << endl;
+		cerr << contig.data << endl;
 	}
 }
 				//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
-// cout << all_contig_metrics.size() << "\t" << contig.support() << "\t" << TP[all_contig_metrics.size()] << "\t" << p.start << endl;
 
+//########### Write Contigs with TP ##############
+// cout << all_contig_metrics.size() << "\t" << contig.support() << "\t" << TP[all_contig_metrics.size()] << "\tchr" << p.ref << "\t" << p.start << endl;
+
+//########### Write Clusters ##############
 // fprintf(writer, ">Cluster: %d Contig: %d MaxSupport: %d TP: %d Reads: \n", p.start, all_contig_metrics.size(), contig.support(), TP[all_contig_metrics.size()]); //TODO find way to get start loc in contig
 // fprintf(writer, "ContigSeq: %s\n", contig.data.c_str());
 // for (auto &read: contig.read_information)
 // 	fprintf(writer, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
 
+				
+				// =================== Probablistic Filter =====================
+				// set<double> positions;
+				// double cur_pos = 0;
+				// double last_pos = 0;
+				// double max_dist = 0;
+				// double num_reads = 1;
 
-				double cur_pos = 0;
-				double last_pos = 0;
-				double max_dist = 0;
-				double num_reads = 1;
-				for (int j = 0; j < contig.support(); j++){
-					cur_pos = (double)contig.read_information[j].location_in_contig;
-//cerr << cur_pos << "-" << last_pos  << "-" << (cur_pos-last_pos) << ",";
-					if((cur_pos-last_pos) > max_dist)max_dist = (cur_pos-last_pos);
-					if(last_pos != cur_pos){
-						sum += (cur_pos-last_pos);//cur_pos;
-//cout << (cur_pos-last_pos) << endl;
-						num_reads++; //ignore reads that start at the same location, if it ever happens.
-					}
-					last_pos = cur_pos;
+
+				// for (int j = 0; j < contig.support(); j++){
+				// 	positions.insert((double)contig.read_information[j].location_in_contig);
+				// }
+
+				// for(double pos : positions){
+				// 	if((pos-last_pos) > max_dist)max_dist = (pos-last_pos);
+				// 	if(pos != 0){
+				// 		sum += (pos-last_pos);
+				// 		num_reads++; 
+				// 	}
+				// 	last_pos = pos;
+				// }
+				// count += num_reads;
+
+				
+				// double cov = (double)con.coverage[0];
+
+				// all_contig_metrics.push_back({num_reads, (double)contig.data.length(), max_dist});
+				// ==================================================================
+
+
+				cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
+
+				if(PRINT_READS){
+					all_contigs.push_back(contig);
+				}
+				else{
+					all_compressed_contigs.push_back(compress(contig));
 				}
 
-				count += num_reads;
-//cerr << endl;	
-				
-				double cov = (double)con.coverage[0];
-
-				all_contig_metrics.push_back({num_reads, (double)contig.data.length(), max_dist});
-
-			//	if(probalistic_filter(num_reads, (double)contig.data.length(), 150, max_dist) > 0.3){
-
-					cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
-
-					if(PRINT_READS){
-						all_contigs.push_back(contig);
-					}
-					else{
-						all_compressed_contigs.push_back(compress(contig));
-					}
-			//	}
 			}
 		}
-		vector<contig>().swap(contigs);
+		//vector<contig>().swap(contigs);
+		vector<contig>().swap(last_contigs);
+		last_contigs = contigs;
 	}
 
 	if(all_contigs.empty() && all_compressed_contigs.empty()){
@@ -977,7 +1007,6 @@ if(PRINT_STATS){
 }
 }
 
-//double kmistrvar::probalistic_filter(double num_reads, double con_len, double avg_read, double dist){
 void kmistrvar::probalistic_filter(){
 
 	double pkall, pk, pk2;
@@ -1000,20 +1029,14 @@ void kmistrvar::probalistic_filter(){
 		//pgk2 = 1-pow((1-(1-pk2)),(m.num_reads-1));
 		feclearexcept(FE_ALL_EXCEPT);
     	errno = 0;
-		pk2 = exp(-rate_param*m.max_dist);
-		//contig_rate = (m.len-150) > 0 ? m.num_reads/(m.len-150) : 0;
-		//pk2 = exp(-contig_rate*m.max_dist);
+		//pk2 = exp(-rate_param*m.max_dist);
+		contig_rate = (m.len-150) > 0 ? m.num_reads/(m.len-150) : 0;
+		pk2 = exp(-contig_rate*m.max_dist);
 		if(errno == ERANGE)pk2 = 0;
 
 		pgk2 = 1-pow((1-pk2),(m.num_reads-1));
 
-//cerr << rate_param << endl;
-//cout << 1/rate_param << "\t" << m.max_dist << "\t" << pk2 << "\t" << pgk2 << endl;
-//cout << pk << "\t" << m.max_dist << "\t" << pow((1-pk),m.max_dist) << "\t" << pgk << endl;
-//cout << m.len << "\t" << m.num_reads << "\t" << (rate_param*m.len) << "\t" << pkall << endl;
-//cout << m.max_dist << "\t" << m.num_reads << "\t" << pk2 << "\t" << pgk2 << endl;
-//cout << m.max_dist << "\t" << m.num_reads << "\t" << m.len << "\t" << pgk << "\t" << pgk2 << endl;
-		if(pgk2 < 0){  //0.001 for sim -2DUP -2FP, 0.00001 -2FP
+		if(pgk2 < 0){  //0.001 for sim -2DUP -2FP, 0.00001 -2FP  0.0000001
 		//if(pgk < 0.3){  //0.2 -4FP
 			if(PRINT_READS){
 				all_contigs[j].data.clear();
@@ -1780,6 +1803,9 @@ num_intervals += interval_count;
 			}
 		}
 
+normal_edges = 0;
+ins_edges = 0;
+
 		//Build Edges
 		//==================================
 		for(int i = 0; i < contig_len; i++){
@@ -1813,7 +1839,7 @@ num_intervals += interval_count;
 
 									visited[u] = true;
 									found = true;
-									contig_graph[interval1.id][interval2.id] = 1;
+									contig_graph[interval1.id][interval2.id] = (contig_len-interval2.len);
 normal_edges++;
 								}
 							}
@@ -1828,7 +1854,7 @@ normal_edges++;
 									if(abs(interval1.loc+interval1.len-interval2.loc) <= uncertainty){
 										visited[u] = true;
 										found = true;
-										contig_graph[interval1.id][interval2.id] = 1;
+										contig_graph[interval1.id][interval2.id] = (contig_len-interval2.len);
 ins_edges++;
 									}
 								}
@@ -1838,12 +1864,12 @@ ins_edges++;
 
 						//to sink
 						if(!found && ( ((interval1.con_loc+k-interval1.len) <= ANCHOR_SIZE) || ((contig_len - (interval1.con_loc+k)) <= ANCHOR_SIZE) || interval1.id == (id-1)) ){ 
-							if(contig_graph[0][interval1.id] > 0){
-								contig_graph[0][interval1.id] = 0;   //remove singletons (doesn't happen apparently)
+							if(contig_graph[0][interval1.id] > 0){  //remove singletons (doesn't happen apparently)
+								contig_graph[0][interval1.id] = 99999;
 singletons++;
 							}														// It happens, but apparently this is not stopping it. Consider all contig coverage.
 							else{
-								contig_graph[interval1.id][id] = 1;
+								contig_graph[interval1.id][id] = (contig_len-interval1.len+(contig_len - (interval1.con_loc+k)));
 							}
 sink_edges++;
 						}
@@ -1851,43 +1877,49 @@ sink_edges++;
 
 					//from source
 					if(!visited[i] && ( ((interval1.con_loc+k-interval1.len) <= ANCHOR_SIZE) || ((contig_len - (interval1.con_loc+k)) <= ANCHOR_SIZE)  || interval1.id == 1) ){ 
-						contig_graph[0][interval1.id] = 1;
+						contig_graph[0][interval1.id] = (contig_len-interval1.len+(interval1.con_loc+k-interval1.len));
 source_edges++;
 					}
 				}
 			}
 		}
 
+cur_debug_id = j;
 
 		// Run Ford Fulkerson for max flow
 		//====================================
 
-		vector<vector<int>> paths = fordFulkerson(id+1, contig_graph, 0, id); //TODO!!!!! do not generate paths that do not contain anchors
+		//vector<vector<int>> paths2 = fordFulkerson(id+1, contig_graph, 0, id); //TODO!!!!! do not generate paths that do not contain anchors
+		vector<pair<vector<int>, int>> paths = dijkstra(id+1, contig_graph2, 0, id, 5);
+
+
 
 		// Predict short variants
 		//====================================
 
-
-path_count += paths.size();
-
 		if(!paths.empty()){
 
-			int max_paths = 1;
+			int max_paths = PATH_LIMIT;
+			int short_dist = paths[0].second;
 
 			// Check each path and classify variant
 			for(int p = 0; p < min(max_paths, (int)paths.size()); p++){  //top x paths
 
-				vector<int>& path = paths[p];
+if(j == CON_NUM_DEBUG)cerr << paths[p].second << " - " << short_dist << " = " << (paths[p].second - short_dist) << endl;
+
+				if(paths[p].second - short_dist > short_dist)break; 
+//if((paths[p].second - short_dist) < 0)cerr << "wrong dist " << j << endl;
+				vector<int>& path = paths[p].first;
 
 if(j == CON_NUM_DEBUG){
 
 	cerr << "All examined paths:" << endl;
 
-	for(int i = path.size()-1; i >= 0; i--){
+	for(int i = path.size()-2; i > 0; i--){
 		cerr << intervals[lookup[path[i]].first][lookup[path[i]].second].loc << "-" << intervals[lookup[path[i]].first][lookup[path[i]].second].loc + intervals[lookup[path[i]].first][lookup[path[i]].second].len << "\t";
 	}
 	cerr << endl;
-	for(int i = path.size()-1; i >= 0; i--){
+	for(int i = path.size()-2; i > 0; i--){
 		cerr << intervals[lookup[path[i]].first][lookup[path[i]].second].con_loc+k - intervals[lookup[path[i]].first][lookup[path[i]].second].len << "-" << intervals[lookup[path[i]].first][lookup[path[i]].second].con_loc+k << "\t";
 	}
 	cerr << "\n========================================================" << endl;
@@ -1899,7 +1931,7 @@ if(j == CON_NUM_DEBUG){
 				bool is_anchor;
 				bool anchor_found = false;
 
-				for(int i = path.size()-1; i >= 0; i--){
+				for(int i = path.size()-2; i > 0; i--){
 
 					// Check if anchor (located near partition range)
 					cur_i = intervals[lookup[path[i]].first][lookup[path[i]].second];
@@ -1919,7 +1951,7 @@ if(j == CON_NUM_DEBUG){
 							a1 = i;
 
 							//leading non-anchor region
-							if(a1 != path.size()-1){
+							if(a1 != path.size()-2){
 								
 				 				i1 = intervals[lookup[path[a1+1]].first][lookup[path[a1+1]].second];
 				 				i2 = intervals[lookup[path[a1]].first][lookup[path[a1]].second];
@@ -1943,7 +1975,7 @@ intc1++;
 
 								i1 = intervals[lookup[path[a1]].first][lookup[path[a1]].second];
 
-								if(i1.con_loc+k-i1.len > ((int)contig_len - (i1.con_loc+k)) || a1 != 0){
+								if(i1.con_loc+k-i1.len > ((int)contig_len - (i1.con_loc+k)) || a1 != 1){
 									//Insertion, Left Side
 									if(i1.con_loc+k-i1.len > ANCHOR_SIZE && !i1.rc){
 				intc2++;	
@@ -2130,7 +2162,7 @@ ugly_fails++;
 						else if(is_anchor && cur_i.rc != intervals[lookup[path[a1]].first][lookup[path[a1]].second].rc){ 
 
 							for(int x = a1-1; x >= 0; x--){
-
+								//The fuck is this?
 								if(intervals[lookup[path[a1]].first][lookup[path[a1]].second].rc == cur_i.rc)continue;
 							}
 
@@ -2163,13 +2195,12 @@ ugly_fails++;
 
 						}
 						// trailing non-anchor region
-						else if(i == 0){
+						else if(i == 1){
 
 			 				i1 = intervals[lookup[path[a1]].first][lookup[path[a1]].second];
 				 			i2 = intervals[lookup[path[a1-1]].first][lookup[path[a1-1]].second];
 			 				chromo_dist = (i1.rc && i2.rc) ? i1.loc-(i2.loc+i2.len) : i2.loc-(i1.loc+i1.len);
 			 				contig_dist = (i2.con_loc-i2.len)-i1.con_loc;
-
 
 							if(abs(chromo_dist) <= uncertainty || abs(contig_dist) <= uncertainty){
 intc5++;
@@ -2189,9 +2220,9 @@ if(!is_anchor)anchor_fails++;
 						}
 
 						// Insertion Right Side, after last anchor interval
-						if(a1 == 0 || a2 == 0){
+						if(a1 == 1 || a2 == 1){
 
-							i1 = (a2 == 0) ? intervals[lookup[path[a2]].first][lookup[path[a2]].second] : intervals[lookup[path[a1]].first][lookup[path[a1]].second];
+							i1 = (a2 == 1) ? intervals[lookup[path[a2]].first][lookup[path[a2]].second] : intervals[lookup[path[a1]].first][lookup[path[a1]].second];
 							if(((int)contig_len - (i1.con_loc+k)) > ANCHOR_SIZE && !i1.rc){
 intc6++;
 								i1.id = all_intervals.size();
@@ -2213,21 +2244,22 @@ intc6++;
 //Debug graph
 if(j == CON_NUM_DEBUG){
 
-	// for(int i=0; i <= id; i++){
-	// 	for(int j=0; j <= id; j++){
-	// 		cerr << contig_graph[i][j] << ", ";
-	// 	}
-	// 	cerr << endl;
-	// }
+	for(int i=0; i <= id; i++){
+		for(int j=0; j <= id; j++){
+			cerr << contig_graph2[i][j] << ", ";
+		}
+		cerr << endl;
+	}
 
 	cerr << "All generated paths:" << endl;
 
-	for(auto &path: paths){
-		for(int i = path.size()-1; i >= 0; i--){
+	for(auto &path_pair: paths){
+		vector<int>& path = path_pair.first;
+		for(int i = path.size()-2; i > 0; i--){
 			cerr << intervals[lookup[path[i]].first][lookup[path[i]].second].loc << "-" << intervals[lookup[path[i]].first][lookup[path[i]].second].loc + intervals[lookup[path[i]].first][lookup[path[i]].second].len << "\t";
 		}
 		cerr << endl;
-		for(int i = path.size()-1; i >= 0; i--){
+		for(int i = path.size()-2; i > 0; i--){
 			cerr << intervals[lookup[path[i]].first][lookup[path[i]].second].con_loc+k - intervals[lookup[path[i]].first][lookup[path[i]].second].len << "-" << intervals[lookup[path[i]].first][lookup[path[i]].second].con_loc+k << "\t";
 		}
 		cerr << endl;
@@ -2281,6 +2313,7 @@ if(j == CON_NUM_DEBUG){
 					if(!interval_pair_ids[w_id].empty()){
 
 						iw = all_intervals[w_id];
+
 						chromo_dist = (iz.rc && iw.rc) ? iw.loc-(iz.loc+iz.len) : iz.loc-(iw.loc+iw.len);
 
 						// Try matching all interval pairs w,x with downstream interval pairs y,z within a user-specified max distance
@@ -2307,8 +2340,8 @@ long_ins++;
 										ix = all_intervals[ip1.id2];
 										iy = all_intervals[ip2.id1];
 										contig_dist1 = abs(iw.con_loc - (ix.con_loc-ix.len));
-										contig_dist2 = abs(iy.con_loc - (iz.con_loc-iz.len));			
-									
+										contig_dist2 = abs(iy.con_loc - (iz.con_loc-iz.len));		
+
 										// Opposite sides are on the same chromosome 
 										if(ix.chr == iy.chr && contig_dist1 <= uncertainty && contig_dist2 <= uncertainty){
 
@@ -2344,6 +2377,7 @@ long_inv3++;
 												
 											}
 											else{
+						
 												if(iw.rc && ix.rc && iy.rc && iz.rc){
 													// Rare, if ever. Ignore for now.
 												}
@@ -2418,6 +2452,14 @@ long_dup++;
 
 					interval_pair& ip1 = interval_pairs[x];
 
+					if(!ip1.visited && (ip1.id1 == -1 || ip1.id2 == -1)){
+						int contig_id = (ip1.id1 == -1) ? all_intervals[ip1.id2].con_id : all_intervals[ip1.id1].con_id;
+						string contig_seq = PRINT_READS ? all_contigs[contig_id].data : con_string(contig_id, 0, all_compressed_contigs[contig_id].data.size()/2);
+						string prefix = contig_seq.substr(0, 10);
+						string suffix = contig_seq.substr(contig_seq.size()-10, 10);
+						if(prefix == "NNNNNNNNNN" || suffix == "NNNNNNNNNN" || prefix == "GGGGGGGGGG" || suffix == "GGGGGGGGGG")continue;
+					}
+
 					if(!ip1.visited && ip1.id1 != -1 && ip1.id2 != -1){
 
 						iw = all_intervals[ip1.id1];
@@ -2427,7 +2469,7 @@ long_dup++;
 						contig_len = PRINT_READS ? all_contigs[ix.con_id].data.length() : all_compressed_contigs[ix.con_id].data.size()/2;
 
 						if(contig_dist <= uncertainty){
-							if((iw.chr != ix.chr || abs(ix.loc - (iw.loc+iw.len)) > max_length/2) && (iw.len + ix.len) > contig_len/3){	 //was: 2,3,3
+							if((iw.chr != ix.chr || abs(ix.loc - (iw.loc+iw.len)) > max_length/2)){// && (iw.len + ix.len) > contig_len/4){	 //was: 2,3,3
 								add_result(iw.con_id, iw, ix, TRANS, ix.chr, 0);
 								ip1.visited = true;
 		one_bp_trans++;
@@ -2629,3 +2671,186 @@ vector<vector<int>> kmistrvar::fordFulkerson(const int DEPTH, int** rGraph, int 
 	return paths;
 }
  
+int kmistrvar::minDistance(const int DEPTH, int dist[], bool sptSet[])
+{
+	// Initialize min value
+	int min = 9999999, min_index;
+
+	for (int v = 0; v < DEPTH; v++){
+		if (sptSet[v] == false && dist[v] <= min){
+		 	min = dist[v];
+		 	min_index = v;
+		}
+	}
+
+	return min_index;
+}
+ 
+// Function to print shortest path from source to j
+// using parent array
+void kmistrvar::getPath(vector<int>& path, int dist[], int parent[], int j)
+{
+
+	path.push_back(j);
+if(cur_debug_id == CON_NUM_DEBUG)cerr << dist[j] << ",";
+	// Base Case : If j is source
+	if (parent[j]==-1)return;
+
+	getPath(path, dist, parent, parent[j]);
+}
+
+pair<vector<pair<int,int>>,int> kmistrvar::findNextPath(const int DEPTH, int** graph, treeNode* node, vector<pair<int,int>> ancestors, int dist[], int parent[]){
+
+	pair<vector<pair<int,int>>,int> min_sub_path;
+	pair<vector<pair<int,int>>,int> cur_sub_path;
+	pair<int,int> min_edge;
+	int min_dist = 99999;
+	int cur_dist;
+	node->ancestors = ancestors;
+
+	for (int v=node->v; v != -1; v=parent[v]){
+		for(int w = 0; w < DEPTH; w++){
+			if(graph[w][v] && w != parent[v]){
+
+				if(!node->children.empty() && node->children.find(w) != node->children.end()){
+					cur_sub_path = findNextPath(DEPTH, graph, node->children[w], ancestors, dist, parent);
+					if(!cur_sub_path.first.empty()){
+						cur_dist = ((cur_sub_path.second-dist[parent[v]])+dist[node->v]);
+						if(cur_dist < min_dist){
+							min_sub_path = cur_sub_path;
+							min_sub_path.second = cur_dist;
+							min_edge = {parent[v],w};
+							min_dist = cur_dist;
+						}
+					}
+				}
+				else{
+					cur_dist = ((dist[w]-dist[parent[v]])+dist[node->v]);
+					if(cur_dist < min_dist){
+						min_edge = {parent[v],w};
+						min_dist = cur_dist;
+					}
+				}
+			}
+		}
+	}
+
+	if((node->children.empty() || node->children.find(min_edge.second) == node->children.end()) && min_dist != 99999){
+		ancestors.push_back(min_edge);
+		min_sub_path.first = ancestors;
+		min_sub_path.second = min_dist;
+	}
+
+	return min_sub_path;
+}
+ 
+// Funtion that implements Dijkstra's single source shortest path
+// algorithm for a graph represented using adjacency matrix
+// representation
+vector<pair<vector<int>, int>> kmistrvar::dijkstra(const int DEPTH, int** graph, int s, int t, int max_paths)
+{
+	int dist[DEPTH];  // The output array. dist[i] will hold
+	          // the shortest distance from src to i
+
+	// sptSet[i] will true if vertex i is included / in shortest
+	// path tree or shortest distance from src to i is finalized
+	bool sptSet[DEPTH];
+
+	// Parent array to store shortest path tree
+	int parent[DEPTH];
+	
+	vector<pair<vector<int>, int>> paths;
+
+	// Initialize all distances as INFINITE and stpSet[] as false
+	for (int i = 0; i < DEPTH; i++)
+	{
+		parent[i] = -1;
+		dist[i] = 9999999;
+		sptSet[i] = false;
+	}
+ 
+    // Distance of source vertex from itself is always 0
+	dist[s] = 0;
+ 
+    // Find shortest path for all vertices
+	for (int count = 0; count < DEPTH-1; count++)
+	{
+		// Pick the minimum distance vertex from the set of
+		// vertices not yet processed. u is always equal to src
+		// in first iteration.
+		int u = minDistance(DEPTH, dist, sptSet);
+
+		// Mark the picked vertex as processed
+		sptSet[u] = true;
+
+		// Update dist value of the adjacent vertices of the
+		// picked vertex.
+		for (int v = 0; v < DEPTH; v++){
+
+			// Update dist[v] only if is not in sptSet, there is
+			// an edge from u to v, and total weight of path from
+			// src to v through u is smaller than current value of
+			// dist[v]
+			if (!sptSet[v] && graph[u][v] && (dist[u] + graph[u][v]) <= dist[v]){
+				parent[v]  = u;
+				dist[v] = dist[u] + graph[u][v];
+			}  
+		}
+	}
+
+	if(parent[t] != -1){
+
+		vector<int> path;
+		vector<treeNode> nodes;
+		unordered_map<string, bool> visted;
+		int path_tree[max_paths];
+
+		//shortest path
+		getPath(path, dist, parent, t);
+		paths.push_back({path, dist[t]});//parent[t]]});
+		treeNode sink;
+		sink.v = t;
+if(cur_debug_id == CON_NUM_DEBUG)cerr << endl;
+		max_paths--;
+
+		while(max_paths > 0){
+
+			vector<int> next_path;
+			pair<vector<pair<int,int>>,int> min_sub_path = findNextPath(DEPTH, graph, &sink, sink.ancestors, dist, parent);
+if(cur_debug_id == CON_NUM_DEBUG)cerr << "path: " << max_paths << endl;
+			if(min_sub_path.first.empty())break;
+		
+			int v = t;
+			int w;
+			treeNode* cur_node = &sink;
+
+if(cur_debug_id == CON_NUM_DEBUG)cerr << "t: " << t  << " size: " << min_sub_path.first.size() << " replace: " << min_sub_path.first.back().first << " with: " << min_sub_path.first.back().second << " dist: " << min_sub_path.second << endl;
+
+
+			for(int i = 0; i < min_sub_path.first.size()+1; i++){
+				w = (i == min_sub_path.first.size()) ? s : min_sub_path.first[i].first;
+				for (v; v != s && v != w; v=parent[v]){
+					next_path.push_back(v);
+				}
+				if(v == s)break;
+
+				if(i == min_sub_path.first.size()-1){
+					treeNode new_node;
+					new_node.v = min_sub_path.first.back().second;
+					new_node.ancestors = min_sub_path.first;
+					nodes.push_back(new_node);
+					cur_node->children[new_node.v] = &nodes.back();
+				}
+
+				cur_node = cur_node->children[min_sub_path.first[i].second];
+				v = cur_node->v;
+			}
+			next_path.push_back(v);
+
+			paths.push_back({next_path, min_sub_path.second});
+			max_paths--;
+		}
+	}
+ 
+	return paths;
+}

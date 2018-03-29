@@ -1,6 +1,7 @@
 #ifndef __EXTRACTOR__
 #define __EXTRACTOR__
 
+#include <deque>
 #include "common.h"
 #include "sam_parser.h"
 #include "bam_parser.h"
@@ -59,6 +60,7 @@ private:
 	unordered_map<string, Record> map_orphan;
 	vector<sortable_read> sorted_soft_clips;
 	vector<cluster> supple_clust;
+	deque<sortable_read> local_reads; 
 	cluster orphan_clust;
 	string cur_ref;
 	int min_sc;
@@ -67,12 +69,13 @@ private:
 	double clip_ratio;
 	int index = 0;
 	const bool use_indel = true;
+	const int INSERT_SIZE = 600;
 
 private:
 	int parse_sc( const char *cigar, int &match_l, int &read_l );
 	bool has_supply_mapping( const char *attr );
 	vector<pair<int, int>> extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel);
-	int dump_oea( const Record &rc, read &tmp, int &anchor_pos );
+	int dump_oea( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio );
 	int dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio );
 	bool dump_supply( const string& readname, const int flag, read &tmp);
 	void extract_reads();
@@ -80,6 +83,7 @@ private:
 public:
 	extractor(string filename, int min_sc, int max_dist, int max_num_read, double clip_ratio = 0.99);
 	~extractor();
+	extractor::cluster& get_next_cluster_heuristic(int uncertainty, int min_support);
 	extractor::cluster& get_next_cluster(int uncertainty, int min_support);
 	bool has_next_cluster();
 	void clear_maps();

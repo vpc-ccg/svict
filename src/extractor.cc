@@ -100,17 +100,20 @@ bool extractor::has_supply_mapping( const char *attr )
 }
 
 /***************************************************************/
-int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos )
+int extractor::dump_oea( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio )
 {
 	unordered_map<string, Record>::iterator it;
 
 	it = map_oea.find( rc.getReadName() );
-	string seq = "";
+	string cigar, seq = "";
 	int flag   = 0, 
 		u_flag = 0,
-		reversed = 0; // if the unmapped end is reversed or not
-	anchor_pos    = 0;
+		reversed = 0,
+		sc_loc = 0; // if the unmapped end is reversed or not
+	int mapped = 0;
+	bool clipped = false;
 	int mate_flag = 0; // 0 for using rc in parition, 1 for using rc2
+
 	if ( it != map_oea.end() )	
 	{
 		if ( (0x4 == ( 0x4 & rc.getMappingFlag() ) ) )
@@ -127,8 +130,21 @@ int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos )
 			u_flag = it->second.getMappingFlag();
 			mate_flag = 1;
 		}
+
+		cigar = string(rc.getCigar());
+		sc_loc = rc.getLocation();
+		bps = extract_bp(cigar, mapped, sc_loc, false);
+
+		if(bps.empty()){
+			for(int i = INSERT_SIZE/2; i <= INSERT_SIZE; i++){
+				bps.push_back({sc_loc-i, mapped});
+			}
+			for(int i = INSERT_SIZE/2; i <= INSERT_SIZE; i++){
+				bps.push_back({sc_loc+mapped+i, mapped});
+			}
+		}
 			
-		anchor_pos = rc.getLocation(); 
+		//anchor_pos = rc.getLocation(); 
 		if (flag & 0x10)
 		{ // anchor reversed, mate positive
 			if ( mate_flag )
@@ -171,6 +187,9 @@ int extractor::dump_oea( const Record &rc, read &tmp, int &anchor_pos )
 int extractor::dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio )
 {
 	int flag = 0, u_flag = 0, reversed = 0, sc_loc = 0;
+	int flag2 = 0, u_flag2 = 0, reversed2 = 0, sc_loc2 = 0;
+	string seq, cigar;
+	string seq2, cigar2;
 
 	unordered_map<string, Record >::iterator it = map_read.find( rc.getReadName() );
 	if ( it == map_read.end() ) 
@@ -187,7 +206,6 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>>
 		int len = 0;
 		int mapped = 0;
 		bool clipped = false;
-		string seq, cigar;
 
 		parse_sc( rc.getCigar(), m1, r1 );
 		if ( 0 == r1) { r1 = (int) strlen( rc.getSequence() ); }
@@ -249,6 +267,64 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>>
 				else{
 					seq = ( !reversed ) ? reverse_complement (rc.getSequence()) : rc.getSequence();
 				}
+				tmp.name = string(rc.getReadName()) + "-";
+				tmp.seq = seq;
+			}
+		}
+		else{
+
+			//first mate
+			reversed2 = ((rc2.getMappingFlag()  & 0x10) == 0x10);
+			flag2 = rc.getMappingFlag();
+			u_flag2 = rc2.getMappingFlag();
+			cigar2 = string(rc2.getCigar());
+			sc_loc2 = rc2.getLocation();
+			r2 = (int) strlen( rc2.getSequence() );
+
+			//second mate
+			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
+			flag = rc2.getMappingFlag();
+			u_flag = rc.getMappingFlag();
+			cigar = string(rc.getCigar());
+			sc_loc = rc.getLocation();
+			r1 = (int) strlen( rc.getSequence() );
+
+			int diff = (sc_loc-sc_loc2);
+			
+			if(reversed == reversed2){
+				//use first mate
+				if(reversed){
+					seq = reverse_complement (rc2.getSequence());
+					
+					for(int i = 0; i < diff; i++){
+						bps.push_back({sc_loc2+r2+i, r2});
+					}
+					
+					tmp.name = string(rc2.getReadName()) + "+";
+					tmp.seq = seq;
+				}
+				//use second mate
+				else{
+					seq = reverse_complement (rc.getSequence());
+
+					for(int i = 0; i < diff; i++){
+						bps.push_back({sc_loc-i, r1});
+					}
+					
+					tmp.name = string(rc.getReadName()) + "-";
+					tmp.seq = seq;
+				}
+
+			}
+			else if(diff > min_sc && reversed2){
+
+				//use both TODO
+				seq = rc.getSequence();
+
+				for(int i = 0; i < diff; i++){
+					bps.push_back({sc_loc-i, r1});
+				}
+				
 				tmp.name = string(rc.getReadName()) + "-";
 				tmp.seq = seq;
 			}
@@ -360,6 +436,7 @@ void extractor::extract_reads()
 	vector<pair<int, int>> bps;
 	string readname, cigar;
 	read cur_read;
+	//read last_read;
 	int orphan_flag, oea_flag, chimera_flag;
 	int len;
 	int sc_loc = 0, start = 0;
@@ -430,17 +507,14 @@ void extractor::extract_reads()
 				if ( !orphan_flag && !chimera_flag ){				
 
 					if ( oea_flag ){
-						//dump_oea( rc, cur_read, t_loc);
+						dump_oea( rc, cur_read, bps, clip_ratio);
 					}
 					else{
 						dump_mapping( rc, cur_read, bps, clip_ratio );			
 					}	
 
-					if(!bps.empty()){
+					if(!bps.empty()){// && (cur_read.seq != last_read.seq || cur_read.name == last_read.name)){
 						add_read = true;
-					}
-					else{
-
 					}
 					
 				}	
@@ -458,12 +532,14 @@ void extractor::extract_reads()
 				if(!bps.empty()){//} || mapped < 30){
 					// insert the hard-clipped mate itself
 					supple_found = dump_supply( string(rc.getReadName()), flag, cur_read);
-					add_read = true;
+					//if(cur_read.seq != last_read.seq || cur_read.name == last_read.name)
+						add_read = true;
 				}
 			}
 			
 			if ( add_read )
 			{
+				//last_read = cur_read;
 
 				if(num_read == 0){
 					strncpy( ref,  rc.getChromosome(), 50);
@@ -471,7 +547,7 @@ void extractor::extract_reads()
 				}
 				num_read++;
 
-				if(!start)start = rc.getLocation();//sc_loc;
+				if(!start)start = rc.getLocation();
 
 				if(is_supple && !supple_found)cur_read.seq = "";
 
@@ -491,6 +567,7 @@ void extractor::extract_reads()
 					if(!sorted_soft_clips.empty()){
 						index = sorted_soft_clips.size();
 						sort(sorted_soft_clips.begin(), sorted_soft_clips.end());
+cerr << "chr" << ref << " done" << endl;
 						break;
 					}
 				}
@@ -513,7 +590,7 @@ void extractor::extract_reads()
 
 /****************************************************************/
 
-extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support) 
+extractor::cluster& extractor::get_next_cluster_heuristic(int uncertainty, int min_support) 
 {
 
 	if(!supple_clust.empty()){
@@ -557,13 +634,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				supple_clust.back().start = c_start;
 				supple_clust.back().end = c_start;
 				supple_clust.back().ref = cur_ref;
-//if(c_start >= 136496660 && c_start <= 136506660)cerr << "========== " << c_start << " " << sc_read.sc_loc << " " << num_read << " " << index << endl;
-// if(cur_ref == "7" && c_start >= 55181160 && c_start <= 55181600){
-// 	//cout << c_start << "\t" << num_read << endl;
-//  }
-// if(cur_ref == "7" && c_start > 55181600){
-//  	exit(0);
-//  }
+
 				if(supple_clust.back().sa_reads.size() > 0){
 					extractor::cluster empty_cluster;
 					supple_clust.push_back(empty_cluster);
@@ -585,6 +656,10 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 
 			index--;
 		}
+
+		supple_clust.back().start = c_start;
+		supple_clust.back().end = c_start;
+		supple_clust.back().ref = cur_ref;
 
 		if(supple_clust.back().sa_reads.size() > 0){
 			extractor::cluster empty_cluster;
@@ -626,6 +701,167 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 	}
 
 }
+
+extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support) 
+{
+
+	if(!supple_clust.empty()){
+		supple_clust.pop_back();
+	}
+
+	if(index > 0){
+		int pos_count;
+		int cur_pos = -1;
+		int num_read = 0;
+		int c_start = 0;
+		extractor::cluster empty_cluster;
+		if(!local_reads.empty()){
+			sortable_read cur_read = local_reads.front();
+			sortable_read& sc_read = sorted_soft_clips[(sorted_soft_clips.size()-index)];
+
+			while(uncertainty < abs(sc_read.sc_loc - cur_read.sc_loc)){
+				local_reads.pop_front();
+				if(local_reads.empty())break;
+				cur_read = local_reads.front();
+			}
+
+			if(!local_reads.empty()){
+				for(auto& local_read : local_reads){
+					if(local_read.seq.empty()){
+						empty_cluster.sa_reads.push_back((sa_read){local_read.name, local_read.flag});
+					}
+					else{
+						empty_cluster.reads.push_back({local_read.name, local_read.seq});
+					}
+				}
+			}
+		}
+		supple_clust.push_back(empty_cluster);
+		
+
+		for(int i = sorted_soft_clips.size()-index; i < sorted_soft_clips.size(); i++){
+
+			sortable_read& sc_read = sorted_soft_clips[i];
+			pos_count = 0;
+
+			if(cur_pos != sc_read.sc_loc){
+
+				while(i+pos_count+1 < sorted_soft_clips.size() && sc_read.sc_loc == sorted_soft_clips[i+pos_count+1].sc_loc){
+					pos_count++;
+				}
+
+				if(pos_count < min_support){
+					i += pos_count;
+					index -= (pos_count+1);
+					continue;
+				}
+				else{
+					cur_pos = sc_read.sc_loc;
+				}
+			}
+
+			num_read++;
+			
+			if( !c_start )c_start = sc_read.sc_loc;
+
+			if(sc_read.sc_loc != c_start){
+
+				supple_clust.back().start = c_start;
+				supple_clust.back().end = c_start;
+				supple_clust.back().ref = cur_ref;
+
+				if(supple_clust.back().sa_reads.size() > 0){
+
+					extractor::cluster empty_cluster;
+
+					if(!local_reads.empty()){
+						sortable_read cur_read = local_reads.front();
+
+						while(uncertainty < abs(sc_read.sc_loc - cur_read.sc_loc)){
+							local_reads.pop_front();
+							if(local_reads.empty())break;
+							cur_read = local_reads.front();
+						}
+
+						if(!local_reads.empty()){
+							for(auto& local_read : local_reads){
+								if(local_read.seq.empty()){
+									empty_cluster.sa_reads.push_back((sa_read){local_read.name, local_read.flag});
+								}
+								else{
+									empty_cluster.reads.push_back({local_read.name, local_read.seq});
+								}
+							}
+						}
+					}
+
+					supple_clust.push_back(empty_cluster);
+				}
+				else{
+					return supple_clust.back();
+				}	
+
+				c_start = 0;
+				num_read = 0;
+			}
+
+			local_reads.push_back(sc_read);
+
+			if(sc_read.seq.empty()){
+				supple_clust.back().sa_reads.push_back((sa_read){sc_read.name, sc_read.flag});
+			}
+			else{
+				supple_clust.back().reads.push_back({sc_read.name, sc_read.seq});
+			}
+
+			index--;
+		}
+
+		supple_clust.back().start = c_start;
+		supple_clust.back().end = c_start;
+		supple_clust.back().ref = cur_ref;
+
+		if(supple_clust.back().sa_reads.size() > 0){
+			extractor::cluster empty_cluster;
+			supple_clust.push_back(empty_cluster);
+			return get_next_cluster(uncertainty, min_support); 
+		}
+		else{
+			return supple_clust.back();
+		}	
+
+	}
+	else if(parser->hasNext()){
+
+		extractor::cluster empty_cluster;
+		supple_clust.push_back(empty_cluster);
+
+		extract_reads();
+
+		return get_next_cluster(uncertainty, min_support); 
+	}	
+	else{
+
+		bool add_read;
+		read cur_read;
+
+		for(auto& read : supple_clust.back().sa_reads){
+
+			add_read = dump_supply( read.readname, read.flag, cur_read);
+
+			if (add_read){
+				supple_clust.back().reads.push_back({cur_read.name, cur_read.seq});
+			}
+			else{
+				ERROR("Supplemental mappings %s are missing in SAM/BAM, file might be invalid\n", read.readname.c_str() );
+			}
+		}
+		
+		return supple_clust.back();
+	}
+
+}
+
 
 bool extractor::has_next_cluster(){
 
