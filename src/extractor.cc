@@ -52,8 +52,6 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 			{	match_l += tmp;	}
 			if ( 'D' != *cigar )
 			{	read_l += tmp;	}
-			else
-			{ match_l -= tmp; }
 			tmp = 0;
 		}
 		cigar++;
@@ -63,10 +61,11 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 }
 
 /****************************************************************/
-vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel){	
+vector<extractor::breakpoint> extractor::extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel){	
 
 	int len = 0;
-	vector<pair<int, int>> bps;
+	vector<breakpoint> bps;
+	mapped = 0;
 
 	for(char c : cigar){
 
@@ -75,17 +74,27 @@ vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_
 			len +=  int(c - '0');
 		}
 		else{
-			if(c == 'S' || c == 'H' || (use_indel && c == 'I')){
-				bps.push_back({sc_loc,len});
-			}
-			else if(c == 'M'){
+			if(c == 'M'){
 				sc_loc += len;
 				mapped += len;
 			}
-			else if(c == 'D' ){ 
-				if(use_indel)bps.push_back({sc_loc,len});
-				sc_loc += len;
+			else if(c != 'D' ){ 
+				if(use_indel && c == 'I'){
+					bps.push_back({sc_loc,len,BOTH});
+				}
+				else if(mapped){
+					bps.push_back({sc_loc,len,LEFT});
+				}
+				else{
+					bps.push_back({sc_loc,len,RIGHT});
+				}
 			}
+			else{
+				if(use_indel)bps.push_back({sc_loc,len,DLEFT});
+				sc_loc += len;
+				if(use_indel)bps.push_back({sc_loc,len,DRIGHT});
+			}
+
 			len = 0;
 		}
 	}
@@ -96,11 +105,11 @@ vector<pair<int, int>> extractor::extract_bp(string& cigar, int& mapped, int sc_
 /****************************************************************/
 bool extractor::has_supply_mapping( const char *attr )
 {
-       return ('S' == *attr );
+    return ('S' == *attr );
 }
 
 /***************************************************************/
-int extractor::dump_oea( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio )
+int extractor::dump_oea( const Record &rc, read &tmp, vector<breakpoint> &bps, double clip_ratio )
 {
 	unordered_map<string, Record>::iterator it;
 
@@ -184,7 +193,7 @@ int extractor::dump_oea( const Record &rc, read &tmp, vector<pair<int, int>> &bp
 // input: a record and a map for all mappings.
 // output: read name along with its location 
 /****************************************************************/
-int extractor::dump_mapping( const Record &rc, read &tmp, vector<pair<int, int>> &bps, double clip_ratio )
+int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bps, double clip_ratio )
 {
 	int flag = 0, u_flag = 0, reversed = 0, sc_loc = 0;
 	int flag2 = 0, u_flag2 = 0, reversed2 = 0, sc_loc2 = 0;
@@ -433,7 +442,7 @@ bool extractor::dump_supply( const string& readname, const int flag, read &tmp)
 /****************************************************************/
 void extractor::extract_reads()
 {
-	vector<pair<int, int>> bps;
+	vector<breakpoint> bps;
 	string readname, cigar;
 	read cur_read;
 	//read last_read;
@@ -452,6 +461,7 @@ void extractor::extract_reads()
 	bool cluster_found;
 	bool clipped;
 	sorted_soft_clips.clear();
+	indexed_soft_clips.clear();
 
 	while(1)
 	{
@@ -513,7 +523,7 @@ void extractor::extract_reads()
 						dump_mapping( rc, cur_read, bps, clip_ratio );			
 					}	
 
-					if(!bps.empty()){// && (cur_read.seq != last_read.seq || cur_read.name == last_read.name)){
+					if(!bps.empty()){
 						add_read = true;
 					}
 					
@@ -532,15 +542,16 @@ void extractor::extract_reads()
 				if(!bps.empty()){//} || mapped < 30){
 					// insert the hard-clipped mate itself
 					supple_found = dump_supply( string(rc.getReadName()), flag, cur_read);
-					//if(cur_read.seq != last_read.seq || cur_read.name == last_read.name)
-						add_read = true;
+					add_read = true;
+
+					if(!supple_found){
+						cur_read.seq =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence();
+					}
 				}
 			}
 			
 			if ( add_read )
 			{
-				//last_read = cur_read;
-
 				if(num_read == 0){
 					strncpy( ref,  rc.getChromosome(), 50);
 					cur_ref = string(ref);
@@ -549,14 +560,10 @@ void extractor::extract_reads()
 
 				if(!start)start = rc.getLocation();
 
-				if(is_supple && !supple_found)cur_read.seq = "";
+				for(breakpoint& bp : bps){
 
-				for(pair<int,int>& bp : bps){
-
-					sc_loc = bp.first;
-
-					if(bp.second >= min_sc){
-						sorted_soft_clips.push_back({string(rc.getReadName()), cur_read.seq, flag, sc_loc});
+					if(bp.len >= min_sc){
+						sorted_soft_clips.insert({string(rc.getReadName()), cur_read.seq, bp, flag, (is_supple && !supple_found)});
 						break;
 					}
 				}
@@ -566,8 +573,11 @@ void extractor::extract_reads()
 					num_read = 0;
 					if(!sorted_soft_clips.empty()){
 						index = sorted_soft_clips.size();
-						sort(sorted_soft_clips.begin(), sorted_soft_clips.end());
-cerr << "chr" << ref << " done" << endl;
+						indexed_soft_clips.reserve(index);
+						for(const sortable_read& read : sorted_soft_clips){
+							indexed_soft_clips.push_back(read);
+						}
+						cerr << "chr" << ref << " done" << endl;
 						break;
 					}
 				}
@@ -579,18 +589,19 @@ cerr << "chr" << ref << " done" << endl;
 		else{
 			if(!sorted_soft_clips.empty()){
 				index = sorted_soft_clips.size();
-				sort(sorted_soft_clips.begin(), sorted_soft_clips.end());
-				break;
+				indexed_soft_clips.reserve(index);
+				for(const sortable_read& read : sorted_soft_clips){
+					indexed_soft_clips.push_back(read);
+				}
+				cerr << "chr" << ref << " done" << endl;
+				cerr << "Processing supplementary clusters..." << endl;
 			}
+			break;
 		}
 	}
 }
 
-
-
-/****************************************************************/
-
-extractor::cluster& extractor::get_next_cluster_heuristic(int uncertainty, int min_support) 
+extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support, bool heuristic) 
 {
 
 	if(!supple_clust.empty()){
@@ -598,44 +609,115 @@ extractor::cluster& extractor::get_next_cluster_heuristic(int uncertainty, int m
 	}
 
 	if(index > 0){
-		int pos_count;
-		int cur_pos = -1;
-		int num_read = 0;
-		int c_start = 0;
+		int pos_count, ldel, both, rdel;
+		int c_start = 0, c_type;
 		extractor::cluster empty_cluster;
 		supple_clust.push_back(empty_cluster);
 
-		for(int i = sorted_soft_clips.size()-index; i < sorted_soft_clips.size(); i++){
+		for(int i = indexed_soft_clips.size()-index; i < indexed_soft_clips.size(); i++){
 
-			sortable_read& sc_read = sorted_soft_clips[i];
-			pos_count = 0;
+			if(i != indexed_soft_clips.size()-index)index = indexed_soft_clips.size()-i; //probably don't need this.
 
-			if(cur_pos != sc_read.sc_loc){
-				while(i+pos_count+1 < sorted_soft_clips.size() && sc_read.sc_loc == sorted_soft_clips[i+pos_count+1].sc_loc){
+			sortable_read& sc_read = indexed_soft_clips[i];
+
+			if(cur_pos != sc_read.bp.sc_loc){
+
+				vector<int> counts = vector<int>(5,0);
+				counts[sc_read.bp.pos] = 1;
+				pos_count = 1;
+
+				while(i+pos_count < indexed_soft_clips.size() && sc_read.bp.sc_loc == indexed_soft_clips[i+pos_count].bp.sc_loc){
+					counts[indexed_soft_clips[i+pos_count].bp.pos]++;
 					pos_count++;
 				}
 
-				if(pos_count < min_support){
+				ldel = (counts[DLEFT] + counts[LEFT]);
+				both = (counts[LEFT] + counts[BOTH] + counts[RIGHT]);
+				rdel = (counts[RIGHT] + counts[DRIGHT]);
+
+//if(cur_ref == "9" && sc_read.bp.sc_loc == 5090790)	cerr << counts[DLEFT] << " - " << counts[LEFT]  << " - " << counts[BOTH] << " - " << counts[RIGHT] << " - " << counts[DRIGHT]  << endl;
+//if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT]  << endl;
+
+
+				if(max(max(ldel, both), rdel) < min_support){
 					i += pos_count;
 					index -= (pos_count+1);
 					continue;
 				}
 				else{
-					cur_pos = sc_read.sc_loc;
+					if(ldel > rdel && ldel > both){
+						i--;
+						skip_pos = i+ldel;
+						skip_count = (rdel+both-counts[RIGHT]);
+						cur_type = 0;
+					}
+					else if(rdel > both){
+						i += (ldel+counts[BOTH]-1);
+						index -= (ldel+counts[BOTH]);
+						cur_type = 2;
+					}
+					else{
+						i += (counts[DLEFT]-1);
+						index -= (counts[DLEFT]);
+						skip_pos = i+(both+counts[DLEFT]);
+						skip_count = counts[DRIGHT];
+						cur_type = 1;
+					}
+
+					if(skip_count == 0)skip_pos = -1;
+					cur_pos = sc_read.bp.sc_loc;
 				}
 			}
+			else if(i == skip_pos){
+				i += skip_count;
+				index -= (skip_count+1);
+				skip_pos = -1;
+				skip_count = 0;
+				continue;
+			}
 
-			num_read++;
+//if(cur_ref == "9" && sc_read.bp.sc_loc == 5090790) 	cerr << i << " - " << index << "/" << sorted_soft_clips.size() << " -------------------- "  << cur_pos << " " << c_start <<  " " << skip_pos << "  " << skip_count << " " << sc_read.seq << endl;
+//if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772) 	cerr << i << " - " << index << "/" << sorted_soft_clips.size() << " ==================== "  << cur_pos << " " << c_start <<  " " << skip_pos << "  " << skip_count << " " << sc_read.seq << endl;
 			
-			if( !c_start )c_start = sc_read.sc_loc;
+			if( !c_start ){
+				c_start = sc_read.bp.sc_loc;
+				c_type = cur_type;
+			}
 
-			if(uncertainty < abs(sc_read.sc_loc - c_start)){
+			if((!heuristic && sc_read.bp.sc_loc != c_start) || (heuristic && uncertainty < abs(sc_read.bp.sc_loc - c_start))){
 
 				supple_clust.back().start = c_start;
 				supple_clust.back().end = c_start;
 				supple_clust.back().ref = cur_ref;
 
+				if(!heuristic && !local_reads.empty()){
+					sortable_read cur_read = local_reads.front();
+
+					while(uncertainty < abs(c_start - cur_read.bp.sc_loc)){
+						local_reads.pop_front();
+						if(local_reads.empty())break;
+						cur_read = local_reads.front();
+					}
+
+					if(!local_reads.empty()){
+						for(auto& local_read : local_reads){
+
+							if((c_start - local_read.bp.sc_loc) == 0)break;
+
+							if(local_read.bp.pos == c_type){
+								if(local_read.supple){
+									supple_clust.back().sa_reads.push_back((sa_read){local_read.name, local_read.flag});
+								}
+								else{
+									supple_clust.back().reads.push_back({local_read.name, local_read.seq});
+								}
+							}
+						}
+					}
+				}
+
 				if(supple_clust.back().sa_reads.size() > 0){
+
 					extractor::cluster empty_cluster;
 					supple_clust.push_back(empty_cluster);
 				}
@@ -644,82 +726,33 @@ extractor::cluster& extractor::get_next_cluster_heuristic(int uncertainty, int m
 				}	
 
 				c_start = 0;
-				num_read = 0;
-			}
-
-			if(sc_read.seq.empty()){
-				supple_clust.back().sa_reads.push_back((sa_read){sc_read.name, sc_read.flag});
 			}
 			else{
-				supple_clust.back().reads.push_back({sc_read.name, sc_read.seq});
-			}
+				if(cur_pos != sc_read.bp.sc_loc)i++;
+				index--;
 
-			index--;
+				if(!heuristic){
+					local_reads.push_back(sc_read);
+					local_reads.back().bp.pos = cur_type;
+				}
+
+				if(sc_read.supple){
+					supple_clust.back().sa_reads.push_back((sa_read){sc_read.name, sc_read.flag});
+				}
+				else{
+					supple_clust.back().reads.push_back({sc_read.name, sc_read.seq});
+				}
+			}
 		}
 
 		supple_clust.back().start = c_start;
 		supple_clust.back().end = c_start;
 		supple_clust.back().ref = cur_ref;
 
-		if(supple_clust.back().sa_reads.size() > 0){
-			extractor::cluster empty_cluster;
-			supple_clust.push_back(empty_cluster);
-			return get_next_cluster(uncertainty, min_support); 
-		}
-		else{
-			return supple_clust.back();
-		}	
-
-	}
-	else if(parser->hasNext()){
-
-		extractor::cluster empty_cluster;
-		supple_clust.push_back(empty_cluster);
-
-		extract_reads();
-
-		return get_next_cluster(uncertainty, min_support); 
-	}	
-	else{
-
-		bool add_read;
-		read cur_read;
-
-		for(auto& read : supple_clust.back().sa_reads){
-
-			add_read = dump_supply( read.readname, read.flag, cur_read);
-
-			if (add_read){
-				supple_clust.back().reads.push_back({cur_read.name, cur_read.seq});
-			}
-			else{
-				ERROR("Supplemental mappings %s are missing in SAM/BAM, file might be invalid\n", read.readname.c_str() );
-			}
-		}
-		
-		return supple_clust.back();
-	}
-
-}
-
-extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support) 
-{
-
-	if(!supple_clust.empty()){
-		supple_clust.pop_back();
-	}
-
-	if(index > 0){
-		int pos_count;
-		int cur_pos = -1;
-		int num_read = 0;
-		int c_start = 0;
-		extractor::cluster empty_cluster;
-		if(!local_reads.empty()){
+		if(!heuristic && !local_reads.empty()){
 			sortable_read cur_read = local_reads.front();
-			sortable_read& sc_read = sorted_soft_clips[(sorted_soft_clips.size()-index)];
 
-			while(uncertainty < abs(sc_read.sc_loc - cur_read.sc_loc)){
+			while(uncertainty < abs(c_start - cur_read.bp.sc_loc)){
 				local_reads.pop_front();
 				if(local_reads.empty())break;
 				cur_read = local_reads.front();
@@ -727,104 +760,25 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 
 			if(!local_reads.empty()){
 				for(auto& local_read : local_reads){
-					if(local_read.seq.empty()){
-						empty_cluster.sa_reads.push_back((sa_read){local_read.name, local_read.flag});
-					}
-					else{
-						empty_cluster.reads.push_back({local_read.name, local_read.seq});
+					
+					if((c_start - local_read.bp.sc_loc) == 0)break;
+
+					if(local_read.bp.pos == c_type){
+						if(local_read.supple){
+							supple_clust.back().sa_reads.push_back((sa_read){local_read.name, local_read.flag});
+						}
+						else{
+							supple_clust.back().reads.push_back({local_read.name, local_read.seq});
+						}
 					}
 				}
 			}
 		}
-		supple_clust.push_back(empty_cluster);
-		
-
-		for(int i = sorted_soft_clips.size()-index; i < sorted_soft_clips.size(); i++){
-
-			sortable_read& sc_read = sorted_soft_clips[i];
-			pos_count = 0;
-
-			if(cur_pos != sc_read.sc_loc){
-
-				while(i+pos_count+1 < sorted_soft_clips.size() && sc_read.sc_loc == sorted_soft_clips[i+pos_count+1].sc_loc){
-					pos_count++;
-				}
-
-				if(pos_count < min_support){
-					i += pos_count;
-					index -= (pos_count+1);
-					continue;
-				}
-				else{
-					cur_pos = sc_read.sc_loc;
-				}
-			}
-
-			num_read++;
-			
-			if( !c_start )c_start = sc_read.sc_loc;
-
-			if(sc_read.sc_loc != c_start){
-
-				supple_clust.back().start = c_start;
-				supple_clust.back().end = c_start;
-				supple_clust.back().ref = cur_ref;
-
-				if(supple_clust.back().sa_reads.size() > 0){
-
-					extractor::cluster empty_cluster;
-
-					if(!local_reads.empty()){
-						sortable_read cur_read = local_reads.front();
-
-						while(uncertainty < abs(sc_read.sc_loc - cur_read.sc_loc)){
-							local_reads.pop_front();
-							if(local_reads.empty())break;
-							cur_read = local_reads.front();
-						}
-
-						if(!local_reads.empty()){
-							for(auto& local_read : local_reads){
-								if(local_read.seq.empty()){
-									empty_cluster.sa_reads.push_back((sa_read){local_read.name, local_read.flag});
-								}
-								else{
-									empty_cluster.reads.push_back({local_read.name, local_read.seq});
-								}
-							}
-						}
-					}
-
-					supple_clust.push_back(empty_cluster);
-				}
-				else{
-					return supple_clust.back();
-				}	
-
-				c_start = 0;
-				num_read = 0;
-			}
-
-			local_reads.push_back(sc_read);
-
-			if(sc_read.seq.empty()){
-				supple_clust.back().sa_reads.push_back((sa_read){sc_read.name, sc_read.flag});
-			}
-			else{
-				supple_clust.back().reads.push_back({sc_read.name, sc_read.seq});
-			}
-
-			index--;
-		}
-
-		supple_clust.back().start = c_start;
-		supple_clust.back().end = c_start;
-		supple_clust.back().ref = cur_ref;
 
 		if(supple_clust.back().sa_reads.size() > 0){
 			extractor::cluster empty_cluster;
 			supple_clust.push_back(empty_cluster);
-			return get_next_cluster(uncertainty, min_support); 
+			return get_next_cluster(uncertainty, min_support, heuristic); 
 		}
 		else{
 			return supple_clust.back();
@@ -838,7 +792,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 
 		extract_reads();
 
-		return get_next_cluster(uncertainty, min_support); 
+		return get_next_cluster(uncertainty, min_support, heuristic); 
 	}	
 	else{
 
@@ -847,13 +801,13 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 
 		for(auto& read : supple_clust.back().sa_reads){
 
-			add_read = dump_supply( read.readname, read.flag, cur_read);
+			add_read = dump_supply( read.name, read.flag, cur_read);
 
 			if (add_read){
 				supple_clust.back().reads.push_back({cur_read.name, cur_read.seq});
 			}
 			else{
-				ERROR("Supplemental mappings %s are missing in SAM/BAM, file might be invalid\n", read.readname.c_str() );
+				ERROR("Supplemental mappings %s are missing in SAM/BAM, file might be invalid\n", read.name.c_str() );
 			}
 		}
 		

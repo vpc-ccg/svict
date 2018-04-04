@@ -38,8 +38,9 @@ struct Node {
 
 struct compare {
     bool operator()(const string& first, const string& second) {
-        return first.size() > second.size();
+        return (first.size() == second.size()) ? first > second : first.size() >= second.size();
     }
+   // !(a < b) && !(b < a)
 };
 
 typedef vector<Node> Graph;
@@ -47,12 +48,22 @@ typedef vector<Node> Graph;
 class assembler {
 private:
 	static const int SEED = 92821; // must be prime
+	static const int PRIME = 92821;//787;
+	static const int K = 23;//787;
+	static const int MAX_READS = 5000;//787;
+	static const int READ_LEN = 301;//787;
 	const int min_glue_size;
+	long long power;
+	long long** hashes;
 
 	Graph graph;
 
 private:
 	bool validate(const string &a, const string &b, int glue_sz);
+	bool validate2(const string &a, const string &b, int pos1, int pos2, int sz);
+	bool validate3(const string &a, const string &b, int pos1, int sz);
+	long long pow(int x, int y);
+	long long rolling_hash(const string& str, int start, int end);
 
 public:
 	assembler();

@@ -781,7 +781,7 @@ cerr << "ASSEMBLY TIME: " << elapsed_secs << endl;
 cerr << endl;
 begin = clock();
 }
-
+//exit(0);
 	//probalistic_filter();
 
 // if(PRINT_STATS){
@@ -834,7 +834,11 @@ void kmistrvar::assemble( int min_support, int max_support, int uncertainty, con
 	compressed_contig con;
 	extractor ext(in_file, min_dist, max_dist, max_num_read, clip_ratio);
 	double sum = 0;
-	double count = 0;
+	double count = 0; 
+
+clock_t begin;
+clock_t end;
+double elapsed_secs;
 
 //########### Read TP ##############
 //FILE *writer = fopen("all.contigs.merged.reads", "wb");
@@ -877,7 +881,7 @@ int read_count = 0;
 			break;
 		}
 
-		extractor::cluster p = ext.get_next_cluster(uncertainty, min_support); //5, 2 for sim, 5,50 for 2     10,30  or 5, 200
+		extractor::cluster p = ext.get_next_cluster(2, 3, false); //0,3 and 4,3 works for both!    5,2 for sim, 5,50 for 2     10,30  or 5, 200
 
 		if (!p.reads.size() || p.reads.size() > 5000) //Temporary threshold until optimizations are finished. 
 			continue;
@@ -888,7 +892,7 @@ int read_count = 0;
 			continue;
 
 		//Assemble contigs
-		contigs = as.assemble(p.reads); 
+		contigs = as.assemble(p.reads);
 
 //STATS
 if(PRINT_STATS){
@@ -902,7 +906,7 @@ if(PRINT_STATS){
 			if (contig.support() >= min_support && contig.support() <= max_support && contig.data.size() <= MAX_ASSEMBLY_RANGE*2 ){
 				for(auto &last_contig: last_contigs){
 					if(contig.support() == last_contig.support() && contig.data == last_contig.data){
-						contig.read_information.clear();
+						contig.read_information.clear();   //investigate  chr9 5090790 and 5094130, tandem dup
 					}
 				}
 			}
@@ -925,8 +929,8 @@ if(PRINT_STATS){
 	contig_count2++; 
 	support_count += contig.support();	
 
-	if(p.start == -38304880){
-		cerr << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << all_contig_metrics.size() << " " << p.ref << endl;
+	if(p.start == -55174772){
+		cerr << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << cluster_info.size() << " " << p.ref << endl;
 		cerr << contig.data << endl;
 	}
 }

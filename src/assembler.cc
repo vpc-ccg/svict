@@ -21,10 +21,31 @@ assembler::assembler():
 assembler::assembler(int min_glue_size):
 	 min_glue_size(min_glue_size)
 {
+	power = 1;
+
+	for (int i = 0; i < K; i++){
+		power = (power * 257) % PRIME;
+	}
+
+	hashes = new long long*[MAX_READS]; //think of a better solution
+
+	for(int i=0; i < MAX_READS; i++){
+		hashes[i] = new long long[READ_LEN];
+	}
+
+	for(int i = 0; i < MAX_READS; i++){
+		for(int j = 0; j < READ_LEN; j++){
+			hashes[i][j] = 0;
+		}
+	}
 }
 
 assembler::~assembler(void) 
 {	
+	for(int i=0; i < MAX_READS; i++){
+		delete[] hashes[i];
+	}
+	delete[] hashes;
 }
 
 // prefix of A == suffix of B
@@ -37,6 +58,45 @@ bool assembler::validate(const string &a, const string &b, int sz)
 	return true;
 }
 
+bool assembler::validate2(const string &a, const string &b, int pos1, int pos2, int sz) 
+{
+	for (int i = 0; i < sz; i++) {
+		if (a[i] != b[pos1+i] || a[a.size()+i-sz] != b[pos2+i-sz]) 
+			return false;
+	}
+	return true;
+}
+
+bool assembler::validate3(const string &a, const string &b, int pos1, int sz) 
+{
+	for (int i = 0; i < sz; i++) {
+		if (a[i] != b[pos1+i]) 
+			return false;
+	}
+	return true;
+}
+
+long long assembler::pow(int x, int y)
+{
+	long long ret = 1;
+
+	for (int i=0; i < y; i++){
+		ret = (ret*x)%PRIME;  //92821
+	}
+	return ret;
+}
+long long assembler::rolling_hash(const string& str, int start, int end)
+{	
+
+	long long hash = 0;
+
+	for (int i = start; i < end; i++){
+		hash = (hash * 257 + str[i]) % PRIME;
+	}
+
+	return hash;
+}
+
 vector<contig> assembler::assemble(vector<pair<string, string>>& reads) 
 {
 	int min_len = 999999;
@@ -46,104 +106,97 @@ vector<contig> assembler::assemble(vector<pair<string, string>>& reads)
 		if(r.second.size() > max_len)max_len = r.second.size();
 	}
 
-	auto R = set<string>();
 	unordered_map<string, string> RN = unordered_map<string, string>();
 	unordered_map<string, vector<Read>> subreads = unordered_map<string, vector<Read>>();
 	vector<string> read_seqs = vector<string>();
+	vector<string> read_seqs2 = vector<string>();
+
+	//New code ====================================
+	set<string, compare> allR = set<string, compare>();
+	int diff = max_len-min_len;
+	int id1 = 0;
 
 	for (auto &r: reads) {
-		R.insert(r.second);
+		allR.insert(r.second);
 		RN[r.second] = r.first;	
 	}
 
-	// Handle nested reads as "subreads"
-	for (auto &r1: R) {
-		bool found = false;
-		for (auto &r2: R) {
-			if(r2.size() > r1.size()){
-				for (int i = 0; i < r2.size()-r1.size()+1; i++) {
-					if(r1 == r2.substr(i, r1.size())){
-						subreads[r2].push_back({RN[r1], r1, 0, i});
-						found = true;
-						break;
-					}
-				}
-				if(found)break;
-			}
-		}
-		if(!found)read_seqs.push_back(r1);
-	}
-
-	//New code ====================================
-	// set<string, compare> allR = set<string, compare>();
-	// vector<unordered_map<string,vector<int>>> phashes;
-	// vector<unordered_map<string,vector<int>>> shashes;
-	// string p,s;
-	// int diff = max_len-min_len;
-	// int k = 23;
-	// int id2 = 0;
-
-	// for (auto &r: reads) {
-	// 	allR.insert(r.second);
-	// 	RN[r.second] = r.first;	
-	// }
+	//----------- Naive -----------------------------------------
 
 	// vector<bool> found = vector<bool>(allR.size(), false);
 
 	// for (auto &r1: allR) {
 
-	// 	if(found[id2++])continue;
-
-	// 	unordered_map<string,vector<int>> ph;
-	// 	unordered_map<string,vector<int>> sh;
-	// 	int id1 = 0;
-	// 	int dist;
-
-	// 	for(int i = 0; i < diff-k && i+k < r1.size(); i++){
-	// 		ph[r1.substr(i, k)].push_back(i);
-	// 		sh[r1.substr(r1.size()-k-i, k)].push_back(i);
+	// 	if(found[id1]){
+	// 		id1++;
+	// 		continue;
 	// 	}
-	// 	phashes.push_back(ph);
-	// 	shashes.push_back(sh);
-
-	// 	p = r1.substr(0, k);
-	// 	s = r1.substr(r1.size()-k, k);
+	// 	int id2 = 0;
 
 	// 	for (auto &r2: allR) {
 	// 		if(r2.size() > r1.size()){
-	// 			if(!found[id1]){
-	// 				if(phashes[id1].find(p) != phashes[id1].end() && shashes[id1].find(s) != shashes[id1].end()){
-	// 					vector<int>& pos1 = phashes[id1][p];
-	// 					vector<int>& pos2 = shashes[id1][s];
-	// 					int i = 0;
-	// 					int j = 0;
-
-	// 					for(i; i < pos1.size(); i++){
-	// 						for(j; j < pos2.size(); j++){
-	// 							dist = j-i;
-	// 							if(dist > r1.size())break;
-	// 							if(dist == r1.size()){
-	// 								subreads[r2].push_back({RN[r1], r1, 0, i});
-	// 								found[id1] = true;
-	// 								break;
-	// 							}
-	// 						}
-	// 						if(j == pos2.size() || found[id1])break;
+	// 			if(!found[id2]){
+	// 				for (int i = 0; i < r2.size()-r1.size()+1; i++) {
+	// 					if(r1 == r2.substr(i, r1.size())){
+	// 						subreads[r2].push_back({RN[r1], r1, 0, i});
+	// 						found[id1] = true;
+	// 						break;
 	// 					}
-	// 					if(found[id1])break;
 	// 				}
+	// 				if(found[id1])break;
 	// 			}
 	// 		}
 	// 		else{
 	// 			break;
 	// 		}
-	// 		id1++;
+	// 		id2++;
 	// 	}
 
 	// 	if(!found[id1])read_seqs.push_back(r1);
+
+	// 	id1++;
 	// }
 
-	// sort(read_seqs.begin(), read_seqs.end());
+	//----------------------------------------------------------------------
+
+	//-------------- Rabin-Karp --------------------------------------------
+
+	bool found;
+	int id2, i;
+
+	for (auto &r1: allR) {
+
+		id2 = 0;
+		found = false;
+		
+		hashes[id1][0] = rolling_hash(r1,0,K);//r1.size());
+		hashes[id1][1] = 0;
+
+		for(auto &r2 : read_seqs){
+			for (i = 1; i <= r2.size()-r1.size()+1; i++) {
+				if(hashes[id1][0] == hashes[id2][i-1]){
+					if (validate3(r1, r2, i-1, r1.size())) {
+						subreads[r2].push_back({RN[r1], r1, 0, i-1});
+						found = true;
+						break;
+					}
+				} 
+				if(hashes[id2][i] == 0){
+					hashes[id2][i] = ((hashes[id2][i-1] * 257  + r2[i+K-1]) % PRIME)-(r2[i-1] * power % PRIME);
+					if(hashes[id2][i] < 0) hashes[id2][i] += PRIME;
+					hashes[id2][i+1] = 0;
+				}
+			}
+
+			if(found)break;
+			id2++;
+		}
+
+		if(!found){
+			read_seqs.push_back(r1);
+			id1++;
+		}
+	}
 
 	//===============================================
 

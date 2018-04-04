@@ -292,41 +292,48 @@ bool BAMParser::readNextDiscordant (void)
 			buf[cc++] = 0;
 		 	currentRecord.strFields[Record::CIGAR] = buf - line;
 			buf += cc;
-
-			//if(!clipped)continue;
-
-		//if(((flag & 0x2) == 0 || clipped) && (flag & 0x200) == 0 && (flag & 0x400) == 0 && (flag & 0xc) != 0xc){
-		 	// p_chr
-		 	string pe_chr = chromosomes[*(int32_t*)(data + 20)];
-		 	if (pe_chr != "*" && pe_chr == chr)
-		 		pe_chr = "=";
-		 	strncpy(buf, pe_chr.c_str(), pe_chr.size() + 1);
+			
+			// p_chr
+			string pe_chr = chromosomes[*(int32_t*)(data + 20)];
+			if (pe_chr != "*" && pe_chr == chr)
+				pe_chr = "=";
+			strncpy(buf, pe_chr.c_str(), pe_chr.size() + 1);
 			currentRecord.strFields[Record::P_CHR] = buf - line;
 			buf += pe_chr.size() + 1;
 
 			// p_loc
 		 	currentRecord.intFields[Record::P_LOC] = *(int32_t*)(data + 24) + 1;
+			
+		 	//Both mates mapped perfectly in the same location 									
+		 	if((!clipped && currentRecord.getLocation() == currentRecord.getPairLocation()) 
+		 		|| (!clipped && ((flag & 0xc) == 0 ) && strncmp("=", currentRecord.getPairChromosome(), 1) ) //chimera
+		 		|| ( (flag & 0xc) == 0xc)  //orphan
+		 		|| ( (flag & 0x200) == 0x200) //bad reads
+		 		|| ( (flag & 0x400) ==  0x400)
+		 		){
+		 		continue;
+		 	}
 
-		 	// seq
-		 	char *sq = data + 8 * 4 + l_read_name + n_cigar_op;
-		 	cc = 0;
-		 	for (int i = 0; i < l_seq; i++)
-		 		buf[cc++] = "=ACMGRSVTWYHKDBN"[(sq[i / 2] >> ((1 - i % 2) * 4)) & 0xf];
-		 	if (l_seq == 0)
-		 		buf[cc++] = '*';
-		 	buf[cc++] = 0;
-		 	currentRecord.strFields[Record::SEQ] = buf - line;
+			// seq
+			char *sq = data + 8 * 4 + l_read_name + n_cigar_op;
+			cc = 0;
+			for (int i = 0; i < l_seq; i++)
+				buf[cc++] = "=ACMGRSVTWYHKDBN"[(sq[i / 2] >> ((1 - i % 2) * 4)) & 0xf];
+			if (l_seq == 0)
+				buf[cc++] = '*';
+			buf[cc++] = 0;
+			currentRecord.strFields[Record::SEQ] = buf - line;
 			buf += cc;
 
 			currentRecord.strFields[Record::OPT] = buf - line;
 
-		 	// optional data ...
-		 	int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
-		 	bool found = false;
-		 	if (pos >= bsize)
-		 		buf[0] = 0;
-		 	else 
-		 		currentRecord.strFields[Record::OPT]++; // avoid \t
+			// optional data ...
+			int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
+			bool found = false;
+			if (pos >= bsize)
+				buf[0] = 0;
+			else 
+				currentRecord.strFields[Record::OPT]++; // avoid \t
 			while (pos < bsize) {
 				if(data[pos] == 'S' && data[pos+1] == 'A'){
 					*buf = '\t', buf++;
@@ -341,7 +348,6 @@ bool BAMParser::readNextDiscordant (void)
 			if(!found)buf += sprintf(buf, "NO");
 
 			disc_found = true;
-		//}
 		}
 
 		*buf = 0;
