@@ -1021,7 +1021,7 @@ if(PRINT_STATS){
 	contig_count2++; 
 	support_count += contig.support();	
 
-	if(p.start >= 55174750 && p.start <= -55174800  ){
+	if(p.start >= 95479901 && p.start <= -95481000  ){
 		cerr << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << cluster_info.size() << " " << p.ref << endl;
 		cerr << contig.data << endl;
 	}
@@ -1723,16 +1723,44 @@ if(sub_count > max_sub)max_sub = sub_count;
 					}
 				}//intervals
 
+				vector<mapping>& cur_intervals = contig_mappings[rc][chromo][j];
+
+				if(!valid_intervals.empty() && valid_intervals.size() > 10){
+
+					cur_intervals.clear();
+					vector<int> mapped = vector<int>(contig_len, 0); 
+					int map_count = 0;
+					sort(valid_intervals.begin(), valid_intervals.end());
+
+					for(auto& interval : valid_intervals){
+						for(x = ((interval.con_loc+k)-interval.len); x < (interval.con_loc+k); x++){
+							if(mapped[x] < REPEAT_LIMIT){
+								for(y = ((interval.con_loc+k)-interval.len); y < (interval.con_loc+k); y++){
+									mapped[y]++;
+									if(mapped[y] == REPEAT_LIMIT)map_count++;
+								}
+								cur_intervals.push_back(interval);
+							}
+						}
+						if(map_count == contig_len)break;
+					}
+
+					vector<mapping>().swap(valid_intervals);
+				}
+				else{
+					cur_intervals = move(valid_intervals);
+				}
+
 
 				//SNP near BP error correction.
-				if(!valid_intervals.empty() && valid_intervals.size() < 800){ // Arbitrary for now
+				if(!cur_intervals.empty() && cur_intervals.size() <= 20){ // Arbitrary for now
 corrected_bp++;
-					sort(valid_intervals.begin(), valid_intervals.end(), con_interval_compare());
-					for(i = 0; i < valid_intervals.size(); i++){
-						mapping& bp_map = valid_intervals[i];
+					sort(cur_intervals.begin(), cur_intervals.end(), con_interval_compare());
+					for(i = 0; i < cur_intervals.size(); i++){
+						mapping& bp_map = cur_intervals[i];
 						if(i > 0 && abs(bp_map.loc - bp.first) < 3){
 	 						for(x = i-1; x >= 0; x--){
-	 							mapping& prior_map = valid_intervals[x];
+	 							mapping& prior_map = cur_intervals[x];
 	 							int e_con_loc = (prior_map.con_loc+k);
 	 							int bp_con_loc = ((bp_map.con_loc+k)-bp_map.len);
 	 							int missed_len = (bp_con_loc-e_con_loc)-1;
@@ -1757,9 +1785,9 @@ corrected_bp++;
 	 						}
 	 						break;	
 	 					}
-	 					else if(i < valid_intervals.size()-1 && abs((bp_map.loc+bp_map.len) - bp.first) < 3){
-							for(x = i+1; x < valid_intervals.size(); x++){
-	 							mapping& post_map = valid_intervals[x];
+	 					else if(i < cur_intervals.size()-1 && abs((bp_map.loc+bp_map.len) - bp.first) < 3){
+							for(x = i+1; x < cur_intervals.size(); x++){
+	 							mapping& post_map = cur_intervals[x];
 	 							int bp_con_loc = (bp_map.con_loc+k);
 	 							int s_con_loc = ((post_map.con_loc+k)-post_map.len);
 	 							int missed_len = (s_con_loc-bp_con_loc)-1;
@@ -1786,12 +1814,10 @@ corrected_bp++;
 	 					}						
 					}
 				}
-
 //STATS
-interval_count += valid_intervals.size(); 
+interval_count += cur_intervals.size(); 
+num_intervals += cur_intervals.size();
 
-				num_intervals += valid_intervals.size();
-				contig_mappings[rc][chromo][j] = move(valid_intervals);
 			}//j
 		}//rc
 

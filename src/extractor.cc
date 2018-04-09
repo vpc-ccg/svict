@@ -617,7 +617,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 		supple_clust.push_back(empty_cluster);
 
 		for(int i = indexed_soft_clips.size()-index; i < indexed_soft_clips.size(); i++){
-
+//if(cur_ref == "9" && i >= 5566 && i <= 6000)cerr << i << "\t" << index << "\t" << indexed_soft_clips[i].bp.sc_loc << endl;
 			if(i != indexed_soft_clips.size()-index)index = indexed_soft_clips.size()-i; //probably don't need this.
 
 			sortable_read& sc_read = indexed_soft_clips[i];
@@ -638,8 +638,8 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				both = (counts[LEFT] + counts[BOTH] + counts[RIGHT]);
 				rdel = (counts[RIGHT] + counts[DRIGHT]);
 
-//if(cur_ref == "9" && sc_read.bp.sc_loc == 5090790)	cerr << counts[DLEFT] << " - " << counts[LEFT]  << " - " << counts[BOTH] << " - " << counts[RIGHT] << " - " << counts[DRIGHT]  << endl;
-//if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT] << " for " << i << endl;
+//if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT] << " for " << i << endl;  95479982
+//if(cur_ref == "9" && sc_read.bp.sc_loc >= 95479082 && sc_read.bp.sc_loc <= 95480082)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT] << " for " << i << " @ " << sc_read.bp.sc_loc << endl;
 
 
 				if(max(max(ldel, both), rdel) < min_support){
@@ -651,7 +651,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 					if(ldel > rdel && ldel > both){
 						i--;
 						skip_pos = i+ldel;
-						skip_count = (rdel+both-counts[RIGHT]);
+						skip_count = (rdel+counts[BOTH]);
 						cur_type = 0;
 					}
 					else if(rdel > both){
@@ -672,15 +672,15 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				}
 			}
 			else if(i == skip_pos){
-				i += (skip_count-1);
+				i += skip_count;
 				index -= (skip_count+1);
 				skip_pos = -1;
 				skip_count = 0;
 				continue;
 			}
 
-//if(cur_ref == "9" && sc_read.bp.sc_loc == 5090790) 	cerr << i << " - " << index << "/" << sorted_soft_clips.size() << " -------------------- "  << cur_pos << " " << c_start <<  " " << skip_pos << "  " << skip_count << " " << sc_read.seq << endl;
 //if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772) 	cerr << i << " - " << index << "/" << sorted_soft_clips.size() << " ==================== "  << cur_pos << " " << c_start <<  " " << skip_pos << "  " << skip_count << " " << sc_read.seq << endl;
+//if(cur_ref == "9" && sc_read.bp.sc_loc == 95479982)cerr << i << " - " << index << "/" << sorted_soft_clips.size() << " ==================== "  << cur_pos << " " << c_start <<  " " << skip_pos << "  " << skip_count << " " << sc_read.seq << endl;
 			
 			if( !c_start ){
 				c_start = sc_read.bp.sc_loc;
