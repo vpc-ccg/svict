@@ -52,6 +52,8 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 			{	match_l += tmp;	}
 			if ( 'D' != *cigar )
 			{	read_l += tmp;	}
+			else
+			{ match_l -= tmp; }
 			tmp = 0;
 		}
 		cigar++;
@@ -220,7 +222,7 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 		if ( 0 == r1) { r1 = (int) strlen( rc.getSequence() ); }
 		parse_sc( rc2.getCigar(), m2, r2 );
 		if ( 0 == r2) { r2 = (int) strlen( rc2.getSequence() ); }
-		
+
 		if ( 0 < r1 && 0 < r2 )
 		{
 			if ( ( 0x2 != ( 0x2 & rc.getMappingFlag() ) ) || ( clip_ratio > ( m1 + m2 )*1.0/( r1 + r2 ) ) )
@@ -627,6 +629,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				pos_count = 1;
 
 				while(i+pos_count < indexed_soft_clips.size() && sc_read.bp.sc_loc == indexed_soft_clips[i+pos_count].bp.sc_loc){
+
 					counts[indexed_soft_clips[i+pos_count].bp.pos]++;
 					pos_count++;
 				}
@@ -636,11 +639,11 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				rdel = (counts[RIGHT] + counts[DRIGHT]);
 
 //if(cur_ref == "9" && sc_read.bp.sc_loc == 5090790)	cerr << counts[DLEFT] << " - " << counts[LEFT]  << " - " << counts[BOTH] << " - " << counts[RIGHT] << " - " << counts[DRIGHT]  << endl;
-//if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT]  << endl;
+//if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT] << " for " << i << endl;
 
 
 				if(max(max(ldel, both), rdel) < min_support){
-					i += pos_count;
+					i += (pos_count-1);
 					index -= (pos_count+1);
 					continue;
 				}
@@ -669,7 +672,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				}
 			}
 			else if(i == skip_pos){
-				i += skip_count;
+				i += (skip_count-1);
 				index -= (skip_count+1);
 				skip_pos = -1;
 				skip_count = 0;
@@ -717,7 +720,6 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				}
 
 				if(supple_clust.back().sa_reads.size() > 0){
-
 					extractor::cluster empty_cluster;
 					supple_clust.push_back(empty_cluster);
 				}

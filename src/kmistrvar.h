@@ -26,12 +26,14 @@ private:
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -1314;//566; //INS;//1105 //YX;//411//2034;//1357;//8562;
-	int cur_debug_id = 0;
+	const int CON_NUM_DEBUG = -13954;//1124;//ugly DUP Ns//605;//1474;//1371;//566; //INS;//1178 //YX;//411//2034;//1357;//8562;
+	int cur_debug_id = 0;  //1538 investigate BP repair
 	const int REPEAT_LIMIT = 2;
 	const int PATH_LIMIT = 2;
+	const int SUB_OPTIMAL = 0;
 	const int CON_REPEAT_LIMIT = 100;//20;//2;
 	const int ANCHOR_SIZE = 40;
+	int BUILD_DIST = 40;
 	const bool USE_ANNO = true;
 	const bool PRINT_READS = false;
 	const bool PRINT_STATS = false;
@@ -41,12 +43,28 @@ private:
 	const vector<string> sv_types = {"INV", "INS", "DEL", "DUP", "TRANS", "BND"};
 	const short INV = 0; const short INS = 1; const short DEL = 2; const short DUP = 3; const short TRANS = 4; const short BND = 5; const short INSL = 6; const short INSR = 7; 
 
+	struct paired_result{
+		long loc;
+		long end;
+		char chr;
+
+		bool operator==( const paired_result& rhs) const{  
+			return (this->loc == rhs.loc) && (this->chr == rhs.chr);
+		}
+	};
+
 	struct pair_hash {
 		inline std::size_t operator()(const std::pair<long,char> & v) const {
 			return v.first*31+v.second;
 		}
 	};
 
+	struct paired_result_hash {
+		inline std::size_t operator()(const paired_result & v) const {
+			return v.loc*31+v.chr;
+		}
+	};
+	
 	struct contig_metrics{
 		double num_reads;
 		double len;
@@ -57,15 +75,11 @@ private:
 		long loc;// : 29; 
 		int len;// : 14;  // up to 16,383
 		int con_loc;// : 14;
-#if GCC_VERSION == 4080
-		bool operator<( const mapping& rhs) const{  //To address known GCC 4.8 bug
+
+		bool operator<( const mapping& rhs) const{  
 			return this->len > rhs.len;
 		}
-#else 
-		bool operator<( const mapping& rhs){
-			return this->len > rhs.len;
-		}
-#endif
+
 	};
 
 	struct mapping_ext{
@@ -76,30 +90,25 @@ private:
 		int con_loc;
 		int con_id;
 		int id;
-#if GCC_VERSION == 4080
-		bool operator<( const mapping_ext& rhs) const{  //To address known GCC 4.8 bug
+
+		bool operator<( const mapping_ext& rhs) const{  
 			return this->len > rhs.len;
 		}
-#else 
-		bool operator<( const mapping_ext& rhs){
-			return this->len > rhs.len;
-		}
-#endif
 	};
 
 	struct sortable_mapping{
 		int id;
 		long loc;// : 29;
 
-#if GCC_VERSION == 4080
-		bool operator<( const sortable_mapping& rhs) const{  //To address known GCC 4.8 bug
+		bool operator<( const sortable_mapping& rhs) const{ 
 			return this->loc < rhs.loc;
 		}
-#else 
-		bool operator<( const sortable_mapping& rhs){
-			return this->loc < rhs.loc;
+	};
+
+	struct con_interval_compare {
+		bool operator()(const mapping& first, const mapping& second) {
+			return (first.con_loc-(first.len/2)) < (second.con_loc-(second.len/2));
 		}
-#endif
 	};
 
 	struct interval_pair{
@@ -138,6 +147,7 @@ private:
 	vector<contig> all_contigs; // 10% of memory
 	vector<compressed_contig> all_compressed_contigs; 
 	vector<contig_metrics> all_contig_metrics;
+	vector<vector<bool>> all_contig_Ns;
 	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
 	vector<last_interval>** last_intervals;
@@ -185,6 +195,7 @@ private:
 	bool bfs(const int DEPTH, int** rGraph, int s, int t, int parent[]);
 	vector<vector<int>> fordFulkerson(const int DEPTH, int** rGraph, int s, int t);
 	int minDistance(const int DEPTH, int dist[], bool sptSet[]);
+	int maxDistance(const int DEPTH, int dist[], bool sptSet[]);
 	void getPath(vector<int>& path, int dist[], int parent[], int j);
 	pair<vector<pair<int,int>>,int> findNextPath(const int DEPTH, int** graph, treeNode* node, vector<pair<int,int>> ancestors, int dist[], int parent[]);
 	vector<pair<vector<int>, int>> dijkstra(const int DEPTH, int** graph, int s, int t, int max_paths);
