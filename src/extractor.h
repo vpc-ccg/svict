@@ -81,7 +81,6 @@ private:
 
 private:
 	int parse_sc( const char *cigar, int &match_l, int &read_l );
-	bool has_supply_mapping( const char *attr );
 	vector<breakpoint> extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel);
 	int dump_oea( const Record &rc, read &tmp, vector<breakpoint> &bps, double clip_ratio );
 	int dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bps, double clip_ratio );

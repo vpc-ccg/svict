@@ -42,35 +42,83 @@ inline string itoa (int i)
 	return string(c);
 }
 
-/********************************************************************/
-void partify (const string &read_file, const string &mate_file, const string &out, int threshold) 
-{
-	gzFile gzf = gzopen(mate_file.c_str(), "rb");
-	unordered_map<string, string> mymap;
+inline bool check_input(string filename){
 
-	const int MAXB = 8096;
-	char buffer[MAXB];
-	char name[MAXB], read[MAXB];
-	while (gzgets(gzf, buffer, MAXB)) {
-		sscanf(buffer, "%s %s", name, read);
-		string read_name = string(name+1); 
-		if (read_name.size() > 2 && read_name[read_name.size() - 2] == '/')
-			read_name = read_name.substr(0, read_name.size() - 2);
-		mymap[read_name] = string(read);
+	Parser* parser;
+	FILE *fi = fopen(filename.c_str(), "rb");
+
+	bool ok = true;
+	char magic[2];
+	fread(magic, 1, 2, fi);
+	fclose(fi);
+
+	int ftype = 1; // 0 for BAM and 1 for SAM
+	if (magic[0] == char(0x1f) && magic[1] == char(0x8b)) 
+		ftype = 0;
+
+	if ( !ftype )
+		parser = new BAMParser(filename);
+	else
+		parser = new SAMParser(filename);
+
+	string comment = parser->readComment();
+
+	if(comment == "" || comment[0] != '@'){
+		E("Error: Input file is not a BAM/SAM or has a missing/malformed header.\n");
+		ok = false;
+	}
+	else{
+		string sorted = split(split(comment, '\n')[0], '\t')[2];
+
+		if(sorted != "SO:coordinate"){
+			E("Error: Input BAM/SAM does not appear to be coordinate sorted as required.\n");
+			ok = false;
+		}
 	}
 
-	genome_partition pt(read_file, threshold, mymap); 
+	delete parser;
 
-	FILE *fo = fopen(out.c_str(), "wb");
-	FILE *fidx = fopen((out + ".idx").c_str(), "wb");
-	while (pt.has_next()) {
-		auto p = pt.get_next();
-		size_t i = pt.dump(p, fo);
-		fwrite(&i, 1, sizeof(size_t), fidx);
+	return ok;
+}
+
+inline bool check_ref(string filename){
+
+	string line;
+	ifstream ref_file(filename);
+
+	if (ref_file.is_open()) {
+		getline(ref_file, line);
+		if(line[0] != '>'){
+			cerr << "Error: Specified reference file (" + filename + ") does not appear to be in fasta format." << endl;
+			return false;
+		}
 	}
-	fclose(fo);
-	fclose(fidx);
-	printf("%d\n", pt.get_cluster_id());
+	else{
+		cerr << "Error: Could not open reference file: " + filename << endl;
+		return false;
+	}
+
+	return true;
+}
+
+inline bool check_gtf(string filename){
+
+	string line;
+	ifstream gtf_file(filename);
+
+	if (gtf_file.is_open()) {
+		getline(gtf_file, line);
+		if(line[0] != '#'){
+			cerr << "Error: Specified GTF file (" + filename + ") does not appear to be correctly formatted, or is missing a header." << endl;
+			return false;
+		}
+	}
+	else{
+		cerr << "Error: Could not open GTF file: " + filename << endl;
+		return false;
+	}
+
+	return true;
 }
 
 /********************************************************************/
@@ -170,35 +218,34 @@ void annotate (string gtf, string in_file, string out_file, bool genomic) {
 /**********************************************/
 void printHELP()
 {
-	LOG( "SVICT: Structural Variant In CTDNA Sequencing Data\n");
+	LOG( "\n======================================================");
+	LOG( "| SViCT: Structural Variant in ctDNA Sequencing Data |");
+	LOG( "======================================================\n");
 	LOG( "\t-h|--help:\tShows help message.");
 	LOG( "\t-v|--version:\tShows current version.");
+
 	LOG( "\t\nMandatory Parameters:");
 	LOG( "\t-i|--input:\tInput file. (SAM/BAM)");
-	LOG( "\t-o|--output:\tPrefix or output file");
-	LOG( "\t\nParameters for Supplementary Information:");
 	LOG( "\t-r|--reference:\tReference Genome. Required for SV detection." );
-	LOG( "\t-g|--annotation:\tGTF file for gene annotation." );
-	LOG( "\t\nOptional Parameters:");
-	LOG( "\t-b|--barcode:\tInput reads contain barcodes.");
-	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
-	LOG( "\t-P|--print_stats:\tPrint statistics as additional output.");
-	LOG( "\t-c|--cluster:\tClustering threshold (default 1000).");
-	LOG( "\t-k|--kmer:\tKmer length (default 14).");
-	LOG( "\t-a|--anchor:\tAnchor length (default 40).");
+
+	LOG( "\t\nMain Optional Parameters:");
+	LOG( "\t-o|--output:\tPrefix or output file");
+	LOG( "\t-g|--annotation:\tGTF file. Enables annotation of SV calls and fusion identification." );
 	LOG( "\t-s|--min_support:\tMin Read Support (default 2).");
 	LOG( "\t-S|--max_support:\tMax Read Support (default unlimited).");
-	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
 	LOG( "\t-m|--min_length:\tMin SV length (default 60).");
 	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
-	LOG( "\t-d|--min_sc:\tMin soft clip to consider (default 5).");
-	LOG( "\t-D|--max_dist:\tMax cluster distance (default 1000).");
-	LOG( "\t-n|--max_reads:\tMax number of reads allowed in a cluster.\n\t\tA region with more than the number of OEA/clipped reads will not be considered in prediction. (default 200).\n");
 
+	LOG( "\t\nAdditional Parameters:");
+	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
+	LOG( "\t-P|--print_stats:\tPrint statistics to stderr.");
+	LOG( "\t-a|--anchor:\t\tAnchor length (default 40).");
+	LOG( "\t-k|--kmer:\t\tk-mer length (default 14).");
+	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
+	LOG( "\t-d|--min_sc:\t\tMinimum soft clip to consider (default 10).");
 
-	LOG( "\t\nExample Command:");
-	LOG( "\tRunning SVICT from a SAM/BAM file can be done in single command:");
-	LOG( "\t./SVICT -i input.sam -r human_genome.fa -o final\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
+	LOG( "\t\nExample Usage:");
+	LOG( "\t./svict -i input.bam -r human_genome.fa -o final\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
 }
 /********************************************************************/
 int main(int argc, char *argv[])
@@ -249,7 +296,7 @@ int main(int argc, char *argv[])
 				printHELP();
 				return 0;
 			case 'v':
-				fprintf(stdout, "%s\n", versionNumber );
+				fprintf(stdout, "SViCT v%s\n", versionNumber );
 				return 0;
 			case 'b':
 				barcodes = true; 
@@ -357,10 +404,18 @@ int main(int argc, char *argv[])
 	
 	if ( !pass )
 	{
-		E("SVICT does not accept the following parameter values:\n\n%s\n\n", msg.c_str() );
+		E("SViCT does not accept the following parameter values:\n\n%s\n\n", msg.c_str() );
 		E("Check help message for more information\n\n");
 		printHELP();
 		return 0;
+	}
+
+	if(!check_input(input_sam))return 0;
+
+	if(!check_ref(reference))return 0;
+
+	if(annotation != ""){
+		if(!check_gtf(annotation))return 0;
 	}
 
 	predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, min_sc, max_dist, max_reads, 0.99);

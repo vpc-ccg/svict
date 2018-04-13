@@ -26,7 +26,7 @@ private:
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -13954;//1124;//ugly DUP Ns//605;//1474;//1371;//566; //INS;//1178 //YX;//411//2034;//1357;//8562;
+	const int CON_NUM_DEBUG = -1191;//1700;//2009;//1124;//ugly DUP Ns//605;//1474;//1371;//566; //INS;//1178 //YX;//411//2034;//1357;//8562;   
 	int cur_debug_id = 0;  //1538 investigate BP repair
 	const int REPEAT_LIMIT = 2;
 	const int PATH_LIMIT = 2;
@@ -75,9 +75,10 @@ private:
 		long loc;// : 29; 
 		int len;// : 14;  // up to 16,383
 		int con_loc;// : 14;
+		int error;
 
 		bool operator<( const mapping& rhs) const{  
-			return this->len > rhs.len;
+			return this->len == rhs.len ? this->error < rhs.error : this->len > rhs.len;
 		}
 
 	};
@@ -88,11 +89,12 @@ private:
 		long loc;// : 29;
 		int len;// : 14;
 		int con_loc;
+		int error;
 		int con_id;
 		int id;
 
 		bool operator<( const mapping_ext& rhs) const{  
-			return this->len > rhs.len;
+			return this->len == rhs.len ? this->error < rhs.error : this->len > rhs.len;
 		}
 	};
 

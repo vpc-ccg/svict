@@ -10,6 +10,7 @@
 
 class Record {
 	char *line;
+	bool hasSupple;
 	size_t lineLength, lineSize;
 	std::array<int32_t, 7> strFields;
 	std::array<int32_t, 5> intFields;
@@ -49,17 +50,14 @@ public:
 	}
 	Record (const Record& a)
 	{
-		ZAMAN_START(Record_Copy);
-
 		strFields = a.strFields;
 		intFields = a.intFields;
+		hasSupple = a.hasSupple;
 		lineLength = a.lineLength;
 		lineSize = a.lineSize;
 		line = (char*)malloc(a.lineSize + 1);
 		std::copy(a.line, a.line + a.lineSize, line);
 		line[lineSize] = 0;
-
-		ZAMAN_END(Record_Copy);
 	}
 
 	Record(Record&& a): Record()
@@ -139,6 +137,8 @@ public:
 			getOptional()
 		);
 	}
+
+	bool hasSuppleMapping() const { return hasSupple; };
 
 	size_t getLineLength() { return lineLength; };
 };

@@ -1,4 +1,4 @@
-EXECUTABLE=SVICT
+EXECUTABLE=svict
 
 all:
 	$(MAKE) -C src all

@@ -275,6 +275,7 @@ kmistrvar::mapping_ext kmistrvar::copy_interval(char chr, bool rc, int con_id, m
 	mapping_copy.loc = interval.loc;
 	mapping_copy.len = interval.len;
 	mapping_copy.con_loc = interval.con_loc;
+	mapping_copy.error = interval.error;
 	mapping_copy.con_id = con_id;
 	mapping_copy.id = -1;
 
@@ -933,7 +934,7 @@ clock_t end;
 double elapsed_secs;
 
 //########### Read TP ##############
-//FILE *writer = fopen("all.contigs.merged.reads", "wb");
+// FILE *writer = fopen("all.contigs.reads", "wb");
 
 // for(int i = 0; i < 14000; i++){
 // 	TP[i] = false;
@@ -1027,16 +1028,6 @@ if(PRINT_STATS){
 	}
 }
 				//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
-
-//########### Write Contigs with TP ##############
-// cout << all_contig_metrics.size() << "\t" << contig.support() << "\t" << TP[all_contig_metrics.size()] << "\tchr" << p.ref << "\t" << p.start << endl;
-
-//########### Write Clusters ##############
-// fprintf(writer, ">Cluster: %d Contig: %d MaxSupport: %d TP: %d Reads: \n", p.start, all_contig_metrics.size(), contig.support(), TP[all_contig_metrics.size()]); //TODO find way to get start loc in contig
-// fprintf(writer, "ContigSeq: %s\n", contig.data.c_str());
-// for (auto &read: contig.read_information)
-// 	fprintf(writer, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
-
 				
 				// =================== Probablistic Filter =====================
 				// set<double> positions;
@@ -1063,9 +1054,18 @@ if(PRINT_STATS){
 				
 				// double cov = (double)con.coverage[0];
 
-				// all_contig_metrics.push_back({num_reads, (double)contig.data.length(), max_dist});
+				//all_contig_metrics.push_back({num_reads, (double)contig.data.length(), max_dist});
 				// ==================================================================
 
+
+//########### Write Contigs with TP ##############
+//cout << cluster_info.size() << "\t" << contig.support() << "\t" << max_dist << "\t" << TP[cluster_info.size()] << "\tchr" << p.ref << "\t" << p.start << endl;
+
+//########### Write Clusters ##############
+// fprintf(writer, ">Cluster: %d Contig: %d MaxSupport: %d TP: %d Reads: \n", p.start, cluster_info.size(), contig.support(), TP[cluster_info.size()]); //TODO find way to get start loc in contig
+// fprintf(writer, "ContigSeq: %s\n", contig.data.c_str());
+// for (auto &read: contig.read_information)
+// 	fprintf(writer, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
 
 				cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
 
@@ -1141,7 +1141,9 @@ void kmistrvar::probalistic_filter(){
 
 		pgk2 = 1-pow((1-pk2),(m.num_reads-1));
 
-		if(pgk2 < 0){  //0.001 for sim -2DUP -2FP, 0.00001 -2FP  0.0000001
+//if(m.num_reads <= 10)cerr << pgk << endl;
+
+		if(pgk < 0.3 && m.num_reads <= 10){  //0.001 for sim -2DUP -2FP, 0.00001 -2FP  0.0000001
 		//if(pgk < 0.3){  //0.2 -4FP
 			if(PRINT_READS){
 				all_contigs[j].data.clear();
@@ -1375,7 +1377,7 @@ void kmistrvar::generate_intervals(const string &out_vcf, const bool LOCAL_MODE)
 	int MAX_INTERVAL_LEN = 20000;
 	int max_interval_len_k1;
 	int num_contigs = PRINT_READS ? all_contigs.size() : all_compressed_contigs.size();
-	int gen_start, gen_end, interval_len, contig_len, contig_lenk1;
+	int gen_start, gen_end, interval_len, contig_len, contig_lenk1, error;
 	bool con_repeat;
 	vector<pair<int,int>> starts;
 	string gen;
@@ -1542,7 +1544,7 @@ kmer_hits_con++;
 								mapping& cur_interval = intervals.back();
 								cur_interval.loc = l_interval.loc;
 								cur_interval.len = l_interval.len;
-								intervals.push_back((mapping){ii, k, -1}); 
+								intervals.push_back((mapping){ii, k, -1, 0}); 
 							}
 
 							l_interval.loc = ii;
@@ -1689,6 +1691,7 @@ if(starts.size() > max_starts)max_starts = starts.size();
 
 						x = start.first;
 						y = start.second;
+						error = 0;
 						
 						// Traverse diagonal
 						while(x < interval.len && y < contig_len && valid_mappings[x][y]){
@@ -1696,6 +1699,7 @@ if(starts.size() > max_starts)max_starts = starts.size();
 							if(y+k < contig_len){
 								if(!valid_mappings[x][y]){
 									if(valid_mappings[x+k][y+k]){
+										error++;
 										x +=k;
 										y +=k;
 									}
@@ -1716,6 +1720,7 @@ if(starts.size() > max_starts)max_starts = starts.size();
 							sub_interval.loc = interval.loc + start.first;
 							sub_interval.len = ilen;
 							sub_interval.con_loc = y;
+							sub_interval.error = error;
 							valid_intervals.push_back(sub_interval); 
 sub_count++;							
 if(sub_count > max_sub)max_sub = sub_count;
@@ -1740,6 +1745,7 @@ if(sub_count > max_sub)max_sub = sub_count;
 									if(mapped[y] == REPEAT_LIMIT)map_count++;
 								}
 								cur_intervals.push_back(interval);
+								break;
 							}
 						}
 						if(map_count == contig_len)break;
@@ -1883,7 +1889,7 @@ if(PRINT_STATS)num_intervals = 0;
 	int num_contigs = PRINT_READS ? all_contigs.size() : all_compressed_contigs.size();
 	int rc = 0;
 	int use_rc = 1;
-	int contig_loc, contig_len, loc, id, ref_dist, con_dist;
+	int contig_loc, contig_len, contig_sup, loc, id, ref_dist, con_dist;
 	unsigned long long index = 0;
 	bool found = false;
 	char contig_chr;
@@ -2047,26 +2053,23 @@ num_intervals += interval_count;
 
 									visited[u] = true;
 									found = true;
-									contig_graph[interval1.id][interval2.id] = -interval2.len;
+									contig_graph[interval1.id][interval2.id] = -(interval2.len-interval2.error);
 normal_edges++;
 								}
 							}
 						}
 					}
 
-					//Build edges for insertions
-					if(!found){
-
-						//to sink
-						if(!found && ( ((interval1.con_loc+k-interval1.len) <= BUILD_DIST) || ((contig_len - (interval1.con_loc+k)) <= BUILD_DIST) || interval1.id == (id-1)) ){ 
-							contig_graph[interval1.id][id] = -interval1.len;
+					//to sink
+					if(!found && ( ((interval1.con_loc+k-interval1.len) <= BUILD_DIST) || ((contig_len - (interval1.con_loc+k)) <= BUILD_DIST) || interval1.id == (id-1)) ){ 
+						contig_graph[interval1.id][id] = -(interval1.len-interval1.error);
 sink_edges++;
-						}
 					}
+					
 
 					//from source
 					if(!visited[i] && ( ((interval1.con_loc+k-interval1.len) <= BUILD_DIST) || ((contig_len - (interval1.con_loc+k)) <= BUILD_DIST)  || interval1.id == 1) ){ 
-						contig_graph[0][interval1.id] = -interval1.len;
+						contig_graph[0][interval1.id] = -(interval1.len-interval1.error);
 source_edges++;
 					}
 				}
@@ -2645,11 +2648,12 @@ long_dup++;
 
 					if(!ip1.visited && (ip1.id1 == -1 || ip1.id2 == -1)){
 						int contig_id = (ip1.id1 == -1) ? all_intervals[ip1.id2].con_id : all_intervals[ip1.id1].con_id;
+						int bp = (ip1.id1 == -1) ? (all_intervals[ip1.id2].con_loc+k-all_intervals[ip1.id2].len) : all_intervals[ip1.id1].con_loc+k;
 						string contig_seq = PRINT_READS ? all_contigs[contig_id].data : con_string(contig_id, 0, all_compressed_contigs[contig_id].data.size()/2);
 						vector<bool>& Ns = all_contig_Ns[contig_id];
 						bool Nfix = true;
 						for(int i = 0; i < 10; i++){
-							if(!Ns[i] && !Ns[contig_seq.size()-i-1])Nfix = false;
+							if(!Ns[bp+i] && !Ns[bp-i-1])Nfix = false;
 						}
 						if(Nfix)continue;
 					}
@@ -2661,6 +2665,7 @@ long_dup++;
 						contig_dist = abs(iw.con_loc - (ix.con_loc-ix.len));
 						chromo_dist = (ix.rc && iw.rc) ? iw.loc-(ix.loc+ix.len) : ix.loc-(iw.loc+iw.len);
 						contig_len = PRINT_READS ? all_contigs[ix.con_id].data.length() : all_compressed_contigs[ix.con_id].data.size()/2;
+						contig_sup = compute_support(ix.con_id, 0, contig_len).second.second;
 
 						if(contig_dist <= uncertainty){
 							if(( (iw.chr != ix.chr || abs(ix.loc - (iw.loc+iw.len)) > max_length/2) ) ){// && (iw.len + ix.len) > contig_len/4){	 //was: 2,3,3  //iw.rc == ix.rc &&  real events are transversions! 

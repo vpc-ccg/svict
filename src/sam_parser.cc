@@ -2,6 +2,7 @@
 #include "record.h"
 #include "sam_parser.h"
 
+#include <iostream>
 #include <assert.h>
 using namespace std;
 
@@ -49,7 +50,7 @@ bool SAMParser::readNext ()
 
 bool SAMParser::readNextDiscordant ()  
 {
-	return readNext ();
+	return readNext();
 }
 
 bool SAMParser::hasNext (void) 
@@ -100,11 +101,22 @@ void SAMParser::parse (Record &record)
 	
 	record.intFields[Record::IntField::LOC]--;
 	record.intFields[Record::IntField::P_LOC]--;
+
+	record.hasSupple = false; 
+	string opt = (string)currentRecord.getOptional();
+	for(int i = 0; i < opt.size()-1; i++){
+		if(opt[i] == 'S'){
+			if(opt[i+1] == 'A'){
+				record.hasSupple = true;
+				break; 
+			}
+		}
+	}
 }
 
 Record SAMParser::next (void) 
 {
-	return std::move(currentRecord);
+	return currentRecord;//std::move(currentRecord); //Could be dangerous?
 }
 
 string SAMParser::head (void) 

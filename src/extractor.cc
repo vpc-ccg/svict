@@ -104,12 +104,6 @@ vector<extractor::breakpoint> extractor::extract_bp(string& cigar, int& mapped, 
 	return bps;
 }
 
-/****************************************************************/
-bool extractor::has_supply_mapping( const char *attr )
-{
-    return ('S' == *attr );
-}
-
 /***************************************************************/
 int extractor::dump_oea( const Record &rc, read &tmp, vector<breakpoint> &bps, double clip_ratio )
 {
@@ -469,7 +463,6 @@ void extractor::extract_reads()
 	{
 		if ( parser->hasNext() )
 		{
-
 			const Record &rc = parser->next();
 			is_supple = false;
 			supple_found = false;
@@ -488,7 +481,7 @@ void extractor::extract_reads()
 				
 				if ( !orphan_flag )
 				{
-					has_supple = has_supply_mapping( rc.getOptional() );
+					has_supple = rc.hasSuppleMapping();
 					readname = string(rc.getReadName());
 
 					if ( has_supple ){

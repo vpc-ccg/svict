@@ -170,6 +170,7 @@ bool BAMParser::readNext (void)
 
  	// optional data ...
  	int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
+ 	currentRecord.hasSupple = false; //TODO set this
  	if (pos >= bsize)
  		buf[0] = 0;
  	else 
@@ -329,7 +330,7 @@ bool BAMParser::readNextDiscordant (void)
 
 			// optional data ...
 			int pos = 8 * 4 + l_read_name + n_cigar_op + (l_seq + 1) / 2 + l_seq;
-			bool found = false;
+			currentRecord.hasSupple = false;
 			if (pos >= bsize)
 				buf[0] = 0;
 			else 
@@ -338,14 +339,14 @@ bool BAMParser::readNextDiscordant (void)
 				if(data[pos] == 'S' && data[pos+1] == 'A'){
 					*buf = '\t', buf++;
 					buf += sprintf(buf, "%c%c:", data[pos], data[pos+1]); 
-					found = true;
+					currentRecord.hasSupple = true;
 					break;
 				}
 				else{
 					pos++;
 				}
 			}
-			if(!found)buf += sprintf(buf, "NO");
+			if(!currentRecord.hasSupple)buf += sprintf(buf, "NO");
 
 			disc_found = true;
 		}
