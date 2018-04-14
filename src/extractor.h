@@ -66,17 +66,16 @@ private:
 	deque<sortable_read> local_reads; 
 	cluster orphan_clust;
 	string cur_ref;
-	int min_sc;
-	int max_dist;
-	int max_num_read;
-	double clip_ratio;
 	int cur_pos = -1;
 	int cur_type = -1;
 	int skip_pos = -1;
 	int skip_count = 0;
 	int index = 0;
-	const bool use_indel = true;
-	const int INSERT_SIZE = 600;
+	const double clip_ratio;
+	const int min_sc;
+	const int max_support;
+	const int max_fragment_size;
+	const bool use_indel;
 	const short DLEFT = 0; const short LEFT = 1; const short BOTH = 2; const short RIGHT = 3; const short DRIGHT = 4;
 
 private:
@@ -88,7 +87,7 @@ private:
 	void extract_reads();
 
 public:
-	extractor(string filename, int min_sc, int max_dist, int max_num_read, double clip_ratio = 0.99);
+	extractor(string filename, int min_sc, int max_support, int max_fragment_size = 200, double clip_ratio = 0.99, bool use_indel = true);
 	~extractor();
 	extractor::cluster& get_next_cluster(int uncertainty, int min_support, bool heuristic);
 	bool has_next_cluster();

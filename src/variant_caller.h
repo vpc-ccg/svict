@@ -5,8 +5,6 @@
 #include "partition.h"
 #include "common.h"
 #include "assembler.h"
-#include "assembler_old.h"
-#include "assembler_ext.h"
 #include "genome.h"
 
 using namespace std;

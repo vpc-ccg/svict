@@ -8,9 +8,10 @@
 using namespace std;
 
 /***************************************************************/
-extractor::extractor( string filename, int min_sc, int max_dist, int max_num_read, double clip_ratio ):
-	min_sc(min_sc), max_dist(max_dist), max_num_read(max_num_read), clip_ratio(clip_ratio)
+extractor::extractor( string filename, int min_sc, int max_support, int max_fragment_size, double clip_ratio, bool use_indel): 
+	min_sc(min_sc), max_support(max_support), max_fragment_size(max_fragment_size), clip_ratio(clip_ratio), use_indel(use_indel)
 {
+
 	int min_length = -1;
 	FILE *fi = fopen(filename.c_str(), "rb");
 
@@ -141,10 +142,10 @@ int extractor::dump_oea( const Record &rc, read &tmp, vector<breakpoint> &bps, d
 		bps = extract_bp(cigar, mapped, sc_loc, false);
 
 		if(bps.empty()){
-			for(int i = INSERT_SIZE/2; i <= INSERT_SIZE; i++){
+			for(int i = max_fragment_size/2; i <= max_fragment_size; i++){
 				bps.push_back({sc_loc-i, mapped});
 			}
-			for(int i = INSERT_SIZE/2; i <= INSERT_SIZE; i++){
+			for(int i = max_fragment_size/2; i <= max_fragment_size; i++){
 				bps.push_back({sc_loc+mapped+i, mapped});
 			}
 		}

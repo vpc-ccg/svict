@@ -1,5 +1,5 @@
-#ifndef __KMISTRVAR__
-#define __KMISTRVAR__
+#ifndef __SVICT_CALLER__
+#define __SVICT_CALLER__
 #define GCC_VERSION (__GNUC__ * 1000 \
                      + __GNUC_MINOR__ * 10 )
 
@@ -10,8 +10,6 @@
 #include "partition.h"
 #include "common.h"
 #include "assembler.h"
-#include "assembler_old.h"
-#include "assembler_ext.h"
 #include "genome.h"
 #include "annotation.h"
 #include "extractor.h"
@@ -19,7 +17,7 @@
 
 using namespace std;
 
-class kmistrvar : public variant_caller
+class svict_caller : public variant_caller
 {
 private:
 
@@ -28,6 +26,7 @@ private:
 	const short MASK_RC = 4;
 	const int CON_NUM_DEBUG = -1191;//1700;//2009;//1124;//ugly DUP Ns//605;//1474;//1371;//566; //INS;//1178 //YX;//411//2034;//1357;//8562;   
 	int cur_debug_id = 0;  //1538 investigate BP repair
+	const double AVG_READ_LEN = 50;
 	const int REPEAT_LIMIT = 2;
 	const int PATH_LIMIT = 2;
 	const int SUB_OPTIMAL = 0;
@@ -184,16 +183,17 @@ private:
 	compressed_contig compress(contig& con);
 	pair<unsigned short,pair<unsigned short,unsigned short>> compute_support(int& id, int start, int end);
 	vector<pair<string, string>> correct_reads(vector<pair<string, string>> reads);
+	void dump_contig(FILE* writer, contig c, int id, int support, int loc, char chr);
 	long add_result(int id, mapping_ext& m1, mapping_ext& m2, short type, char pair_chr, long pair_loc);
 	void print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
-	void assemble(int min_support, int max_support, int uncertainty, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio);
+	void assemble(string print_fastq, int min_support, int max_support, int window_size, const bool LOCAL_MODE, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic);
 	void probalistic_filter();
 	void index();
 	void generate_intervals(const string &out_vcf, const bool LOCAL_MODE);
-	void generate_intervals_bwa(const string &sam_file, const bool LOCAL_MODE);
-	void predict_variants(const string &out_vcf, int uncertainty, int min_length, int max_length);
+	void generate_intervals_from_file(const string &input_file, const string &fastq_file, const bool LOCAL_MODE);
+	void predict_variants(const string &out_vcf, int uncertainty, int min_length, int max_length, int sub_optimal);
 	bool bfs(const int DEPTH, int** rGraph, int s, int t, int parent[]);
 	vector<vector<int>> fordFulkerson(const int DEPTH, int** rGraph, int s, int t);
 	int minDistance(const int DEPTH, int dist[], bool sptSet[]);
@@ -204,8 +204,9 @@ private:
 	
 public:
 	
-	kmistrvar(int kmer_len, int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats);
-	~kmistrvar();
-	void run_kmistrvar(const string &out_vcf, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE, int min_dist, int max_dist, int max_num_read, double clip_ratio = 0.99);
+	svict_caller(int kmer_len, int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats);
+	~svict_caller();
+	void run(const string& out_vcf, const string& print_fastq, int min_support, int max_support, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE, int window_size, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic);
+	void resume(const string& out_vcf, const string &input_file, const string& print_fastq, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE);
 };
 #endif

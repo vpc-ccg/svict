@@ -10,9 +10,7 @@
 #include "partition.h"
 #include "common.h"
 #include "assembler.h"
-#include "assembler_old.h"
-#include "assembler_ext.h"
-#include "kmistrvar.h"
+#include "svict_caller.h"
 #include "genome.h"
 #include "simulator.h"
 #include "common.h"
@@ -42,7 +40,7 @@ inline string itoa (int i)
 	return string(c);
 }
 
-inline bool check_input(string filename){
+inline bool check_input(string filename, bool resume){
 
 	Parser* parser;
 	FILE *fi = fopen(filename.c_str(), "rb");
@@ -70,7 +68,7 @@ inline bool check_input(string filename){
 	else{
 		string sorted = split(split(comment, '\n')[0], '\t')[2];
 
-		if(sorted != "SO:coordinate"){
+		if(sorted != "SO:coordinate" && !resume){
 			E("Error: Input BAM/SAM does not appear to be coordinate sorted as required.\n");
 			ok = false;
 		}
@@ -122,12 +120,17 @@ inline bool check_gtf(string filename){
 }
 
 /********************************************************************/
-void predict (const string &partition_file, const string &reference, const string &gtf, const bool barcodes, const bool print_reads, const bool print_stats, const string &out_vcf,
-					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, const bool LOCAL_MODE,
-					int min_dist, int max_dist, int max_num_read, double clip_ratio)
+void predict (const string &input_file, const string &reference, const string &gtf, const string &out_vcf, const string &print_fastq, const bool print_reads, const bool print_stats, 
+					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE,
+					int window_size, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic, bool resume)
 {
-	kmistrvar predictor(k, anchor_len, partition_file, reference, gtf, barcodes, print_reads, print_stats);
-	predictor.run_kmistrvar(out_vcf, min_support, max_support, uncertainty, min_length, max_length, LOCAL_MODE, min_dist, max_dist, max_num_read, clip_ratio);
+	svict_caller predictor(k, anchor_len, input_file, reference, gtf, print_reads, print_stats);
+	if(resume){
+		predictor.resume(out_vcf, input_file, print_fastq, uncertainty, min_length, max_length, sub_optimal, LOCAL_MODE);
+	}
+	else{
+		predictor.run(out_vcf, print_fastq, min_support, max_support, uncertainty, min_length, max_length, sub_optimal, LOCAL_MODE, window_size, min_sc, max_fragment_size, clip_ratio, use_indel, heuristic);
+	}
 }
 
 /********************************************************************/
@@ -229,7 +232,7 @@ void printHELP()
 	LOG( "\t-r|--reference:\tReference Genome. Required for SV detection." );
 
 	LOG( "\t\nMain Optional Parameters:");
-	LOG( "\t-o|--output:\tPrefix or output file");
+	LOG( "\t-o|--output:\tPrefix of output file");
 	LOG( "\t-g|--annotation:\tGTF file. Enables annotation of SV calls and fusion identification." );
 	LOG( "\t-s|--min_support:\tMin Read Support (default 2).");
 	LOG( "\t-S|--max_support:\tMax Read Support (default unlimited).");
@@ -239,10 +242,16 @@ void printHELP()
 	LOG( "\t\nAdditional Parameters:");
 	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
 	LOG( "\t-P|--print_stats:\tPrint statistics to stderr.");
+	LOG( "\t-w|--window_size:\t\tClustering window (default 3).");
+	LOG( "\t-d|--min_sc:\t\tMinimum soft clip to consider (default 10).");
+	LOG( "\t-n|--no_indel:\t\tDisable indel parsing (I and D in cigar).");
 	LOG( "\t-a|--anchor:\t\tAnchor length (default 40).");
 	LOG( "\t-k|--kmer:\t\tk-mer length (default 14).");
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
-	LOG( "\t-d|--min_sc:\t\tMinimum soft clip to consider (default 10).");
+	LOG( "\t-c|--sub_optimal:\tMaximum difference from longest path (default 0 - co-optimals only).");
+	LOG( "\t-H|--heuristic:\t\tUse clustering heuristic (good for data with PCR duplicates).");
+	LOG( "\t-D|--dump_contigs:\t\tDump contigs in fastq format for mapping.");
+	LOG( "\t-R|--resume:\t\tResume at the interval chaining stage with mapped contigs.");
 
 	LOG( "\t\nExample Usage:");
 	LOG( "\t./svict -i input.bam -r human_genome.fa -o final\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
@@ -257,10 +266,12 @@ int main(int argc, char *argv[])
 	string	input_sam  = "" ,
 			reference  = "" ,
 			out_prefix = "out" ,
-			annotation = "" ;
+			annotation = "" ,
+			contig_file = "";
 
-	int k = 14, a = 40, s = 2, S = 999999, u = 8, m = 60, M = 20000, min_sc = 10, max_dist = 1000, max_reads = 200; 
-	bool barcodes = false, print_reads = false, print_stats = false;
+	int k = 14, a = 40, s = 2, S = 5000, u = 8, c = 0, w = 2, m = 60, M = 20000, min_sc = 10, max_fragment_size = 200; 
+	bool barcodes = false, print_reads = false, print_stats = false, dump_contigs = false, resume = false, indel = true, heuristic = false;
+	double clip_ratio = 0.99;
 	int ref_flag  = 0;
 
 	static struct option long_opt[] =
@@ -279,16 +290,19 @@ int main(int argc, char *argv[])
 		{ "min_support", required_argument, 0, 's' },
 		{ "max_support", required_argument, 0, 'S' },
 		{ "uncertainty", required_argument, 0, 'u' },
+		{ "sub_optimal", required_argument, 0, 'c' },
 		{ "min_length", required_argument, 0, 'm' },
 		{ "max_length", required_argument, 0, 'M' },
+		{ "window_size", required_argument, 0, 'w' },
 		{ "min_sc", required_argument, 0, 'd' },
-		{ "max_dist", required_argument, 0, 'D' },
-		{ "max_reads", required_argument, 0, 'n' },
-	//	{ "both-mate", no_argument, 0, 'B' },
+		{ "no_indel", no_argument, 0, 'n' },
+		{ "heuristic", no_argument, 0, 'H'},
+		{ "dump_contigs", no_argument, 0, 'D'},
+		{ "resume", no_argument, 0, 'R'},
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPk:a:s:S:u:m:M:d:D:n:", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPk:a:s:S:u:c:m:M:w:d:nHDR", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -335,20 +349,32 @@ int main(int argc, char *argv[])
 			case 'u':
 				u = atoi(optarg);
 				break;
+			case 'c':
+				c = atoi(optarg);
+				break;
 			case 'm':
 				m = atoi(optarg);
 				break;
 			case 'M':
 				M = atoi(optarg);
 				break;
+			case 'w':
+				w = atoi(optarg);
+				break;
 			case 'd':
 				min_sc = atoi(optarg);
 				break;
-			case 'D':
-				max_dist = atoi(optarg);
-				break;
 			case 'n':
-				max_reads = atoi(optarg);
+				indel = false; 
+				break;
+			case 'H':
+				heuristic = true; 
+				break;
+			case 'D':
+				dump_contigs = true; 
+				break;
+			case 'R':
+				resume = true; 
 				break;
 			case '?':
 				fprintf(stderr, "Unknown parameter: %s\n", long_opt[opt_index].name);
@@ -362,10 +388,6 @@ int main(int argc, char *argv[])
 	int pass = 1;
 	string msg = "";
 	// sanity checking
-	if( max_reads <= 1 ){
-		msg += "\tError: Max reads in a cluster must be larger than 1\n";
-		pass = 0;
-		}
 	if( k < 5 ) {
 		msg += "\tError: K must be greater than 5\n";
 		pass = 0;
@@ -383,8 +405,28 @@ int main(int argc, char *argv[])
 		pass = 0;
 		}
 	if ( u < 0 ){
-		msg += "\tError:Uncertainty must be a positive integer";
+		msg += "\tError: Uncertainty must be a positive integer";
 		pass = 0;
+	}
+	if ( c < 0 ){
+		msg += "\tError: Sub optimal difference must be a positive integer";
+		pass = 0;
+	}
+	if ( w < 0 ){
+		msg += "\tError: Window size must be a positive integer";
+		pass = 0;
+	}
+	else if(w > 10){
+		msg += "\tError: Window size must be <= 10";
+		pass = 0;
+	}
+	if ( min_sc < 0 ){
+		msg += "\tError: Minimum soft clip must be a positive integer";
+		pass = 0;
+	}
+	if ( min_sc > m ){
+		E("d > m. Adjusting d to equal m.\n");
+		min_sc = m;
 	}
 	if ( m <= u ){
 		msg += "\tError: Min SV length should be > uncertainty";
@@ -410,7 +452,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if(!check_input(input_sam))return 0;
+	if(!check_input(input_sam, resume))return 0;
 
 	if(!check_ref(reference))return 0;
 
@@ -418,7 +460,11 @@ int main(int argc, char *argv[])
 		if(!check_gtf(annotation))return 0;
 	}
 
-	predict(input_sam, reference, annotation, barcodes, print_reads, print_stats, (out_prefix + ".vcf"), k, a, s, S, u, m, M, 0, min_sc, max_dist, max_reads, 0.99);
+	if(dump_contigs || resume){
+		contig_file = (out_prefix + ".fastq");
+	}
 
-	return 0;
+	predict(input_sam, reference, annotation, (out_prefix + ".vcf"), contig_file, print_reads, print_stats,  k, a, s, S, u, m, M, c, false, w, min_sc, max_fragment_size, clip_ratio, indel, heuristic, resume);
+
+	return 0;	
 }
