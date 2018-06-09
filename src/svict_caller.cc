@@ -20,8 +20,8 @@
 
 using namespace std;
 #define strequ(A,B) (strcmp(A.c_str(), B.c_str()) == 0)
-svict_caller::svict_caller(int kmer_len, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats) : 
-	variant_caller(input_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), PRINT_READS(print_reads), PRINT_STATS(print_stats) {
+svict_caller::svict_caller(int kmer_len, const int assembler_overlap, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats) : 
+	variant_caller(assembler_overlap, input_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), PRINT_READS(print_reads), PRINT_STATS(print_stats) {
 
 	k = kmer_len;
 	num_kmer = (unsigned long long)pow(4,k);
@@ -155,6 +155,7 @@ compressed_contig svict_caller::compress(contig& con){
 	compressed_contig comp_con;
 	vector<bool> data;
 	vector<unsigned short> coverage(con.data.length());
+	vector<string> read_names;
 
 	data.reserve(con.data.length()*2);
 
@@ -178,10 +179,12 @@ compressed_contig svict_caller::compress(contig& con){
 		for (int k=0; k < con.read_information[j].seq.length(); k++){
 			coverage[k+con.read_information[j].location_in_contig]++;
 		}
+		read_names.push_back(con.read_information[j].name);
 	}
 
 	comp_con.data = data;
 	comp_con.coverage = coverage;
+	comp_con.read_names = read_names;
 
 	return comp_con;
 }
@@ -402,9 +405,13 @@ void svict_caller::assemble(string print_fastq, int min_support, int max_support
 	vector<contig> contigs;
 	vector<contig> last_contigs;
 	compressed_contig con;
-	extractor ext(in_file, min_sc, max_support, max_fragment_size, clip_ratio, use_indel);
+	extractor ext(in_file, min_sc, max_support, max_fragment_size, clip_ratio, use_indel, PRINT_STATS);
+	vector<extractor::cluster> clusters;
+	extractor::cluster clust;
 	double sum = 0;
 	double count = 0; 
+	int cur_start;
+	string cur_ref;
 	if(print_fastq != "")writer = fopen(print_fastq.c_str(), "wb");
 
 clock_t begin;
@@ -446,121 +453,128 @@ int read_count = 0;
 	//=====================================
 	cerr << "Assembling contigs..." << endl;
 
+	clust = ext.get_next_cluster(window_size, min_support, heuristic); 
+
 	while (1) {
 		
 		if(!ext.has_next_cluster()){
 			break;
 		}
 
-		extractor::cluster p = ext.get_next_cluster(window_size, min_support, heuristic); 
+		cur_start = clust.start;
+		cur_ref = clust.ref;
 
-		if (!p.reads.size() || p.reads.size() > max_support) 
-			continue;
+		while(abs(clust.start - cur_start) < window_size && cur_ref == clust.ref){
+		 	clusters.push_back(clust);
+		 	cur_start = clust.start;
+		 	cur_ref = clust.ref;
+		 	if(!ext.has_next_cluster())break;
+			clust = ext.get_next_cluster(window_size, min_support, heuristic); 
 
-		if(USE_BARCODES)p.reads = correct_reads(p.reads);
-
-		if (!p.reads.size()) 
-			continue;
-
-		//Assemble contigs
-		contigs = as.assemble(p.reads);
-
-//STATS
-if(PRINT_STATS){
-	read_count += p.reads.size();
-	part_count++;
-	contig_count1 += contigs.size(); 	
-}
-	
-		//Remove duplicates
-		if(!heuristic){
-			for(auto &contig: contigs){
-				if (contig.support() >= min_support && contig.support() <= max_support && contig.data.size() <= MAX_ASSEMBLY_RANGE*2 ){
-					for(auto &last_contig: last_contigs){
-						if(contig.support() == last_contig.support() && contig.data == last_contig.data){
-							contig.read_information.clear();   //investigate  chr9 5090790 and 5094130, tandem dup
-						}
-					}
-				}
+			while(!clust.reads.size() || clust.reads.size() > max_support){
+				if(!ext.has_next_cluster())break; // if last cluster is bad, it will still be included
+				clust = ext.get_next_cluster(window_size, min_support, heuristic); 
 			}
 		}
-		
 
-		for (auto &contig: contigs){ 
-			//TODO why are these long contigs happening? TP is in 6000bp contig :(
-			if (contig.support() >= min_support && contig.support() <= max_support && contig.data.size() <= MAX_ASSEMBLY_RANGE*2 ){// && contig.data.size() <= (4*301)) { //Conservative threshold based on 4 times the longest read length of current short read sequencing technologies
+		if(clusters.size() > 1){
+			set_cover(clusters);
+		}
 
-				if(print_fastq != "")dump_contig(writer, contig, (int)cluster_info.size(), contig.support(), p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()));
+		for(auto& p : clusters){
+			if (!p.reads.size() || p.reads.size() > max_support) 
+				continue;
 
-//STATS
-if(PRINT_STATS){
-	contig_count2++; 
-	support_count += contig.support();	
+			if(USE_BARCODES)p.reads = correct_reads(p.reads);
 
-	if(p.start >= 95479901 && p.start <= -95481000  ){
-		cerr << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << cluster_info.size() << " " << p.ref << endl;
-		cerr << contig.data << endl;
+			if (!p.reads.size()) 
+				continue;
+
+			//Assemble contigs
+			contigs = as.assemble(p.reads);
+
+	//STATS
+	if(PRINT_STATS){
+		read_count += p.reads.size();
+		part_count++;
+		contig_count1 += contigs.size(); 	
+	}	
+
+			for (auto &contig: contigs){ 
+				//TODO why are these long contigs happening? TP is in 6000bp contig :(
+				if (contig.support() >= min_support && contig.support() <= max_support && contig.data.size() <= MAX_ASSEMBLY_RANGE*2 ){// && contig.data.size() <= (4*301)) { //Conservative threshold based on 4 times the longest read length of current short read sequencing technologies
+
+					if(print_fastq != "")dump_contig(writer, contig, (int)cluster_info.size(), contig.support(), p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()));
+
+	//STATS
+	if(PRINT_STATS){
+		contig_count2++; 
+		support_count += contig.support();	
+
+		if(p.start >= 43114459 && p.start <= 43114530  ){
+			cerr << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << cluster_info.size() << " " << p.ref << endl;
+			cerr << contig.data << endl;
+		}
 	}
-}
-				//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
-				
-				// =================== Probablistic Filter =====================
-				set<double> positions;
-				double cur_pos = 0;
-				double last_pos = 0;
-				double max_dist = 0;
-				double num_reads = 1;
+					//if(LOCAL_MODE)regions.push_back({contig.cluster_chr, {(pt.get_start()-ref_flank), (pt.get_end()+ref_flank)}});
+					
+					// =================== Probablistic Filter =====================
+					set<double> positions;
+					double cur_pos = 0;
+					double last_pos = 0;
+					double max_dist = 0;
+					double num_reads = 1;
 
-				for (int j = 0; j < contig.support(); j++){
-					positions.insert((double)contig.read_information[j].location_in_contig);
-				}
-
-				for(double pos : positions){
-					if((pos-last_pos) > max_dist)max_dist = (pos-last_pos);
-					if(pos != 0){
-						sum += (pos-last_pos);
-						num_reads++; 
+					for (int j = 0; j < contig.support(); j++){
+						positions.insert((double)contig.read_information[j].location_in_contig);
 					}
-					last_pos = pos;
+
+					for(double pos : positions){
+						if((pos-last_pos) > max_dist)max_dist = (pos-last_pos);
+						if(pos != 0){
+							sum += (pos-last_pos);
+							num_reads++; 
+						}
+						last_pos = pos;
+					}
+					count += num_reads;
+
+					all_contig_metrics.push_back({num_reads, (double)contig.data.length(), max_dist});
+					// ==================================================================
+
+
+	//########### Write Contigs with TP ##############
+	//cout << cluster_info.size() << "\t" << contig.support() << "\t" << max_dist << "\t" << TP[cluster_info.size()] << "\tchr" << p.ref << "\t" << p.start << endl;
+
+	//########### Write Clusters ##############
+	// fprintf(writer, ">Cluster: %d Contig: %d MaxSupport: %d TP: %d Reads: \n", p.start, cluster_info.size(), contig.support(), TP[cluster_info.size()]); //TODO find way to get start loc in contig
+	// fprintf(writer, "ContigSeq: %s\n", contig.data.c_str());
+	// for (auto &read: contig.read_information)
+	// 	fprintf(writer, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
+
+					cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
+
+					vector<bool> Ns = vector<bool>(contig.data.size(),false);
+
+					//store N positions
+					for (int i = 0; i < contig.data.length(); i++){
+						if(contig.data[i] == 'N')Ns[i] = true;
+					}
+
+					all_contig_Ns.push_back(Ns);
+
+					if(PRINT_READS){
+						all_contigs.push_back(contig);
+					}
+					else{
+						all_compressed_contigs.push_back(compress(contig));
+					}
+
 				}
-				count += num_reads;
-
-				all_contig_metrics.push_back({num_reads, (double)contig.data.length(), max_dist});
-				// ==================================================================
-
-
-//########### Write Contigs with TP ##############
-//cout << cluster_info.size() << "\t" << contig.support() << "\t" << max_dist << "\t" << TP[cluster_info.size()] << "\tchr" << p.ref << "\t" << p.start << endl;
-
-//########### Write Clusters ##############
-// fprintf(writer, ">Cluster: %d Contig: %d MaxSupport: %d TP: %d Reads: \n", p.start, cluster_info.size(), contig.support(), TP[cluster_info.size()]); //TODO find way to get start loc in contig
-// fprintf(writer, "ContigSeq: %s\n", contig.data.c_str());
-// for (auto &read: contig.read_information)
-// 	fprintf(writer, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
-
-				cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
-
-				vector<bool> Ns = vector<bool>(contig.data.size(),false);
-
-				//store N positions
-				for (int i = 0; i < contig.data.length(); i++){
-					if(contig.data[i] == 'N')Ns[i] = true;
-				}
-
-				all_contig_Ns.push_back(Ns);
-
-				if(PRINT_READS){
-					all_contigs.push_back(contig);
-				}
-				else{
-					all_compressed_contigs.push_back(compress(contig));
-				}
-
 			}
-		}
-		//vector<contig>().swap(contigs);
-		vector<contig>().swap(last_contigs);
-		last_contigs = contigs;
+			vector<contig>().swap(contigs);
+		}//clusters
+		vector<extractor::cluster>().swap(clusters);
 	}
 
 	if(all_contigs.empty() && all_compressed_contigs.empty()){
@@ -581,6 +595,57 @@ if(PRINT_STATS){
 	cerr << "Average Contig Support: " << (support_count/contig_count2) << endl;
 	cerr << "Rate Parameter Estimate: " << rate_param << endl;
 }
+}
+
+vector<int> svict_caller::set_cover(vector<extractor::cluster>& clusters){
+
+	smoother sm;
+	vector<smoother::cluster> cover_clusters;
+	vector<smoother::Xread> reads;
+	unordered_map<string, int> read_to_id;
+	vector<int> selected_clusters;
+	int cid, num, st, ed;
+
+	for (auto& c : clusters) {
+
+		int id = cover_clusters.size();
+		cover_clusters.push_back({id, c.start, 0, 0, vector<int>()});
+
+		for(auto& read : c.reads){
+			int rid = read_to_id.size();
+			auto f = read_to_id.find(string(read.first));
+			if (f == read_to_id.end()) {
+				reads.push_back({vector<int>()});
+				read_to_id[read.first] = rid;
+			} else {
+				rid = f->second;
+			}
+			reads[rid].clusters.push_back(id);
+			cover_clusters[id].reads.push_back(rid);
+		}
+	}
+
+	for (auto& c : cover_clusters) {
+		auto s = unordered_set<int>(c.reads.begin(), c.reads.end());
+		c.reads = vector<int>(s.begin(), s.end());
+		for (auto &r: c.reads) {
+			auto s = unordered_set<int>(reads[r].clusters.begin(), reads[r].clusters.end());
+			reads[r].clusters = vector<int>(s.begin(), s.end());
+			assert(reads[r].clusters.size() > 0);
+			c.unresolved += reads[r].clusters.size() > 1;
+		}
+		c.support = c.reads.size() - c.unresolved;
+	}
+
+	sm.set_cover(cover_clusters, reads, read_to_id);
+
+	for (auto& c : cover_clusters) {
+		if(c.reads.empty()){
+			clusters[c.id].reads.clear();
+		}
+	}
+
+	return selected_clusters;
 }
 
 void svict_caller::probalistic_filter(){
@@ -980,7 +1045,7 @@ int corrected_bp = 0;
 	// Traverse each chromosome or region (Local mode)
 	for (auto &region: regions){
 
-		chromo = region.first;
+		chromo = (find(chromos.begin(), chromos.end(), ref.get_ref_name()) - chromos.begin());
 		gen = ref.extract(chromos[chromo], region.second.first, region.second.second); //get region sequence
 		gen_start = max(0,region.second.first-1);
 		gen_end = gen.length()-k+1;
@@ -1374,6 +1439,8 @@ num_intervals += cur_intervals.size();
 
 
 		jj++;
+		cerr << "chr" << ref.get_ref_name() << " done" << endl;
+		if(region.first != regions[regions.size()-1].first)ref.load_next();
 
 	}//regions
 
@@ -1446,7 +1513,6 @@ if(PRINT_STATS)num_intervals = 0;
 
 	vector<sortable_mapping>* sorted_intervals = new vector<sortable_mapping>[25];	// Sorted list for traversal 
 	unordered_map<int, vector<int>> interval_pair_ids;								// Mapping from interval -> interval_pairs
-	vector<mapping_ext> all_intervals;												// Bulk data of unused intervals
 	vector<interval_pair> interval_pairs; 											// Pairs of intervals
 
 	FILE *fo_vcf = fopen(out_vcf.c_str(), "ab");
@@ -1658,7 +1724,7 @@ if(j == CON_NUM_DEBUG){
 	}
 	cerr << "\n========================================================" << endl;
 }
-				mapping_ext cur_i, i1, i2;
+				mapping_ext cur_i, i1, i2, i3, i4;
 				int chromo_dist, contig_dist;
 				int a1 = -1;
 				int a2 = -1;
@@ -1766,64 +1832,47 @@ anchor_fails++;
 				 					if(allNs)contig_dist = 0;
 				 				}
 
-					 			//Negative Strand (Rare)
+					 			//Negative Strand (Rare, only handle most common case: INV)
 					 			if(i1.rc && i2.rc){ 
 
 					 				chromo_dist = i1.loc-(i2.loc+i2.len);
 
-					 				//DUP
-					 				if(i2.loc+i2.len-i1.loc >= min_length && i2.loc+i2.len-i1.loc <= max_length && abs(contig_dist) <= uncertainty){
-						 				 // only 3 FP
-short_dup1++;
-						 			}
-						 			else{
-						 				//INS
-										if(abs(chromo_dist) <= uncertainty && contig_dist > uncertainty){
-											add_result(j, i1, i2, INS, i2.chr, 0);
-short_ins1++;
-										}//DEL
-										else if(chromo_dist > uncertainty && abs(contig_dist) <= uncertainty){
-											add_result(j, i1, i2, DEL, i2.chr, 0);  //+1 TP +2FP, probably lots of redundancy (careful, may inflate support)
-intc4++;
-						 					i1.id = all_intervals.size();
-											all_intervals.push_back(i1);
-											i2.id = all_intervals.size();
-											all_intervals.push_back(i2);
-											sorted_intervals[i1.chr].push_back({i1.id,i1.loc});
-											sorted_intervals[i2.chr].push_back({i2.id,i2.loc});
-											interval_pairs.push_back({false,i1.id,i2.id});
-											interval_pair_ids[i1.id].push_back(pair_id);
-								 		 	interval_pair_ids[i2.id].push_back(pair_id++);
-										}
-										else if(abs(chromo_dist - contig_dist) <= uncertainty && min(abs(chromo_dist), abs(contig_dist)) > uncertainty){// max(min_length, uncertainty+1)){
-											add_result(j, i1, i2, INV, i2.chr, 0);
+					 				if(abs(chromo_dist - contig_dist) <= uncertainty && min(abs(chromo_dist), abs(contig_dist)) > uncertainty){// max(min_length, uncertainty+1)){   This is stupid
+										add_result(j, i1, i2, INV, i2.chr, 0); // 1 TP
+										i1.id = all_intervals.size();
+										all_intervals.push_back(i1);
+										i2.id = all_intervals.size();
+										all_intervals.push_back(i2);
+									//	results_full.push_back({{i2.id, -1, -1, i1.id}, INV});
 short_inv1++;
-										}//???
-										else if(chromo_dist > uncertainty && contig_dist > uncertainty){
-											//zero
-//mystery1++;	
-										}//SNP
-										else{
-//mystery2++;								//FP
-										}
-						 			}
+									}
 					 			}
 					 			//Positive Strand
 					 			else{ 
 					 				//DUP
 					 				if(i1.loc+i1.len-i2.loc >= min_length && i1.loc+i1.len-i2.loc <= max_length && abs(contig_dist) <= uncertainty){
 						 				add_result(j, i1, i2, DUP, i2.chr, 0);
+						 				i1.id = all_intervals.size();
+										all_intervals.push_back(i1);
+										i2.id = all_intervals.size();
+										all_intervals.push_back(i2);
+									//	results_full.push_back({{i2.id, i1.id, -1, -1}, DUP});
+									//	results_full.push_back({{ -1, -1, i2.id, i1.id}, DUP});
 short_dup2++;
 						 			}
 						 			else{
 						 				//INS
 										if(abs(chromo_dist) <= uncertainty && contig_dist > uncertainty){
 											add_result(j, i1, i2, INS, i2.chr, 0);
+											i1.id = all_intervals.size();
+											all_intervals.push_back(i1);
+											i2.id = all_intervals.size();
+											all_intervals.push_back(i2);
+										//	results_full.push_back({{i1.id, -1, -1, i2.id}, INS});
 short_ins2++;
 										}//DEL
 										else if(chromo_dist > uncertainty && abs(contig_dist) <= uncertainty){
 intc4++;
-if(j == CON_NUM_DEBUG)cerr << "Should be here" << endl;
 											i1.id = all_intervals.size();
 											all_intervals.push_back(i1);
 											i2.id = all_intervals.size();
@@ -1834,13 +1883,23 @@ if(j == CON_NUM_DEBUG)cerr << "Should be here" << endl;
 											interval_pair_ids[i1.id].push_back(pair_id);
 								 		 	interval_pair_ids[i2.id].push_back(pair_id++);
 										}//INV
-										else if(abs(chromo_dist - contig_dist) <= uncertainty && min(abs(chromo_dist), abs(contig_dist)) >= max(min_length, uncertainty+1)){ // min_length){
+										else if(abs(chromo_dist - contig_dist) <= uncertainty && min(abs(chromo_dist), abs(contig_dist)) >= max(min_length, uncertainty+1)){ // min_length){  This is stupid
 											add_result(j, i1, i2, INV, i2.chr, 0);
+											i1.id = all_intervals.size();
+											all_intervals.push_back(i1);
+											i2.id = all_intervals.size();
+											all_intervals.push_back(i2);
+										//	results_full.push_back({{i1.id, -1, -1, i2.id}, INV});
 short_inv1++;
 										}//??? Maybe SNPs/errors near breakpoint
 										else if(chromo_dist > uncertainty && contig_dist > uncertainty){
 											if(chromo_dist - abs(contig_dist) >= MIN_SV_LEN_DEFAULT){
-												add_result(j, i1, i2, DEL, i2.chr, 0);
+												add_result(j, i1, i2, DEL, i2.chr, 0);   // This is stupid
+												i1.id = all_intervals.size();
+												all_intervals.push_back(i1);
+												i2.id = all_intervals.size();
+												all_intervals.push_back(i2);
+											//	results_full.push_back({{i1.id, -1, -1, i2.id}, DEL});
 mystery1++;
 											}
 										}
@@ -1865,7 +1924,7 @@ mystery2++;
 
 					 				if(abs(contig_dist) > uncertainty)break;
 
-					 				if((u != a1 && u-1 != a2) && (i1.chr != i2.chr || i1.rc != i2.rc || abs(chromo_dist) > uncertainty))break;
+					 				if((u != a1 && u-1 != a2) && (i1.chr != i2.chr || i1.rc != i2.rc || abs(chromo_dist) > uncertainty))break;  //This is stupid (Inversions)
 
 					 				if(u-1 == a2)found = true;
 								}
@@ -1873,21 +1932,17 @@ mystery2++;
 								if(found){
 
 					 				i1 = intervals[lookup[path[a1]].first][lookup[path[a1]].second];
-				 					i2 = intervals[lookup[path[a2]].first][lookup[path[a2]].second];
+					 				i2 = intervals[lookup[path[a1-1]].first][lookup[path[a1-1]].second];
+					 				i3 = intervals[lookup[path[a2+1]].first][lookup[path[a2+1]].second];
+				 					i4 = intervals[lookup[path[a2]].first][lookup[path[a2]].second];
 
-				 					if(intervals[lookup[path[a1-1]].first][lookup[path[a1-1]].second].rc != i1.rc  && intervals[lookup[path[a2+1]].first][lookup[path[a2+1]].second].rc != i2.rc){
+				 					if(i2.rc != i1.rc  && i3.rc != i4.rc){
 				 					//	add_result(j, i1, i2, INV, i2.chr, 0);
 short_inv2++;
 									}
-									else if(i1.chr != i2.chr){
-										add_result(j, i1, i2, TRANS, i2.chr, 0);
+									else if(i1.chr != i2.chr && i3.chr != i4.chr){
+										//add_result(i1.con_id, i1, i2, TRANS, i3.chr, add_result(i4.con_id, i3, i4, TRANS, i4.chr, -1));
 short_trans++;
-									}
-								}
-								else{
-									if(contig_dist > uncertainty && i1.rc == i2.rc && i1.chr == i2.chr){
-ugly_fails++;
-										add_result(j, i1, i2, DEL, i2.chr, 0);
 									}
 								}
 							}
@@ -1896,11 +1951,6 @@ ugly_fails++;
 						}
 						// Interval is anchor with different orientation from the other anchor (one BP INV)
 						else if(is_anchor && cur_i.rc != intervals[lookup[path[a1]].first][lookup[path[a1]].second].rc){ 
-
-							for(int x = a1-1; x >= 0; x--){
-								//The fuck is this?
-								if(intervals[lookup[path[a1]].first][lookup[path[a1]].second].rc == cur_i.rc)continue;
-							}
 
 							a2 = i;
 
@@ -2059,14 +2109,15 @@ if(j == CON_NUM_DEBUG){
 								interval_pair& ip2 = interval_pairs[y];
 
 								// If not visited and compatible 
-								if(!ip1.visited && !ip2.visited && ip1.id1 == w_id && ip2.id2 == z_id && ip1.id2 != z_id && ip2.id1 != w_id && ip1.id1 != -1 && ip2.id2 != -1){
+								if(!ip1.visited && !ip2.visited && ip1.id1 == w_id && ip2.id2 == z_id && ip1.id2 != z_id && ip2.id1 != w_id && ip1.id1 != -1 && ip2.id2 != -1 && iw.con_id != iz.con_id){
 
-									//Both have empty interals on opposite sides, INS
+									//Both have empty intervals on opposite sides, INS
 									if(ip1.id2 == -1 && ip2.id1 == -1){
 										if(abs(chromo_dist) <= uncertainty){
 											ip1.visited = true;
 											ip2.visited = true;
 											add_result(iw.con_id, iw, iw, INS, iz.chr, add_result(iz.con_id, iz, iz, INS, iz.chr, -1));
+										//	results_full.push_back({{w_id, -1, -1, z_id}, INS});
 											found = true;
 long_ins++;
 										}
@@ -2085,20 +2136,14 @@ long_ins++;
 											if(iw.rc != ix.rc && iy.rc != iz.rc){ //if(ix.rc || iy.rc){
 
 												if(ix.rc && iy.rc){
-
+													//Standard INV case
 													if(ix.loc > iy.loc && (ix.loc+ix.len)-iy.loc < max_length  && abs(((ix.loc+ix.len)-iy.loc) - chromo_dist) <= uncertainty){
 														ip1.visited = true;
 														ip2.visited = true;
-														add_result(iw.con_id, iw, ix, INV, iy.chr, add_result(iz.con_id, iy, iz, INV, iz.chr, -1));		
+														add_result(iw.con_id, iw, ix, INV, iy.chr, add_result(iz.con_id, iy, iz, INV, iz.chr, -1));
+													//	results_full.push_back({{w_id, ip1.id2, ip2.id1, z_id}, INV});		
 														found = true;												
 long_inv1++;
-													}
-													else if(ix.loc < iy.loc && (iw.loc+iw.len)-iz.loc < max_length && abs(((iw.loc+iw.len)-iz.loc) - (iy.loc-(ix.loc+ix.len))) <= uncertainty){
-														ip1.visited = true;
-														ip2.visited = true;
-														add_result(iw.con_id, iw, ix, INV, iy.chr, add_result(iz.con_id, iy, iz, INV, iz.chr, -1));
-														found = true; //This causes some to be missed, 1 inv, 1 trans
-long_inv2++;
 													}
 												}
 												else if(iw.rc && iz.rc){
@@ -2106,6 +2151,7 @@ long_inv2++;
 														ip1.visited = true;
 														ip2.visited = true;
 														add_result(iw.con_id, iw, ix, INV, iy.chr, add_result(iz.con_id, iy, iz, INV, iz.chr, -1));
+													//	results_full.push_back({{w_id, ip1.id2, ip2.id1, z_id}, INV});
 														found = true;
 long_inv3++;
 													}
@@ -2122,6 +2168,7 @@ long_inv3++;
 														ip1.visited = true;
 														ip2.visited = true;
 														add_result(iw.con_id, iw, ix, TRANS, iy.chr, add_result(iz.con_id, iy, iz, TRANS, iz.chr, -1));
+													//	results_full.push_back({{w_id, ip1.id2, ip2.id1, z_id}, TRANS});
 														found = true;
 long_trans++;
 													}
@@ -2210,18 +2257,27 @@ long_dup++;
 						contig_sup = compute_support(ix.con_id, 0, contig_len).second.second;
 
 						if(contig_dist <= uncertainty){
-							if(( (iw.chr != ix.chr || abs(ix.loc - (iw.loc+iw.len)) > max_length/2) ) ){// && (iw.len + ix.len) > contig_len/4){	 //was: 2,3,3  //iw.rc == ix.rc &&  real events are transversions! 
+							if(( (iw.chr != ix.chr || abs(ix.loc - (iw.loc+iw.len)) > max_length/2) ) ){
 								add_result(iw.con_id, iw, ix, TRANS, ix.chr, 0);
+								// results_full.push_back({{w_id, ip1.id2, -1, -1}, TRANS});
+								// results_full.push_back({{-1, -1, w_id, ip1.id2}, TRANS});
 								ip1.visited = true;
 		one_bp_trans++;
 							}
 							else if(abs(ix.loc - iw.loc) <= max_length && abs(ix.loc - iw.loc) >= min_length){
 								if(iw.rc != ix.rc){
 									add_result(iw.con_id, iw, ix, INV, ix.chr, 0); //ALL FP come from here
+									// if(ix.rc){
+									// 	results_full.push_back({{w_id, ip1.id2, -1, -1}, INV});
+									// }
+									// else{
+									// 	results_full.push_back({{-1, -1, w_id, ip1.id2}, INV});
+									// }
 		one_bp_inv++;
 								}
 								else if(chromo_dist >= min_length){
 									add_result(iw.con_id, iw, ix, DEL, ix.chr, 0);
+									//results_full.push_back({{w_id, -1, -1, ip1.id2}, DEL});
 		one_bp_del++;
 								}
 								else if(iw.loc+iw.len-ix.loc >= min_length){
@@ -2241,6 +2297,7 @@ long_dup++;
 
 						if(ix.len >= contig_len/3 && (ix.con_loc+k-ix.len) > contig_len/4){
 							add_result(ix.con_id, ix, ix, INSL, ix.chr, 0);
+							//results_full.push_back({{-1, -1, -1, ip1.id2}, INS});
 		one_bp_ins++;
 						}
 						ip1.visited = true;
@@ -2251,6 +2308,7 @@ long_dup++;
 
 						if(iw.len >= contig_len/3 && (contig_len-iw.con_loc+k) > contig_len/4){
 							add_result(iw.con_id, iw, iw, INSR, iw.chr, 0);
+							//results_full.push_back({{ip1.id1, -1, -1, -1}, INS});
 		one_bp_ins++;
 						}
 						ip1.visited = true;
@@ -2310,7 +2368,8 @@ if(PRINT_STATS){
 	cerr << "Anchor fails: " << anchor_fails << endl;
 	cerr << "Ugly Fails: " << ugly_fails << endl;
 }
-
+	
+	//find_consensus();
 	print_results(fo_vcf, fr_vcf, uncertainty);
 
 	cerr << "Done." << endl;
@@ -2592,6 +2651,396 @@ vector<pair<vector<int>, int>> svict_caller::dijkstra(const int DEPTH, int** gra
 	}
  
 	return paths;
+}
+
+int svict_caller::check_loc(int id, pair<int,int>& cloc, bool left){
+
+	if(id != -1){
+		mapping_ext& m = all_intervals[id];
+		int loc;
+
+		if(left){
+			loc = m.loc + m.len;
+		}
+		else{
+			loc = m.loc;
+		}
+		if(loc-cloc.first <= 5 && cloc.second-loc <= 5){
+			return 1;
+		}
+		else{
+			return 0;
+		}
+	}
+
+	return 2;
+}
+
+void svict_caller::update_loc(int id, pair<int,int>& cloc, bool left){
+
+	if(id != -1){
+		mapping_ext& m = all_intervals[id];
+		int loc;
+
+		if(left){
+			loc = m.loc + m.len;
+		}
+		else{
+			loc = m.loc;
+		}
+
+		if(loc < cloc.first){
+			cloc.first = loc;
+		}
+		else if(loc > cloc.second){
+			cloc.second = loc;
+		}
+	}
+}
+
+vector<int> svict_caller::compute_result_support(result_consensus& rc){
+	vector<int> supports = vector<int>(5,0);
+	unordered_set<int> contig_ids;
+	unordered_set<string> all_reads;
+
+	for(int i = 0; i < 4; i++){
+		unordered_set<string> reads;
+
+		if(!rc.intervals[i].empty()){
+			for(const int& id : rc.intervals[i]){
+				contig_ids.insert(all_intervals[id].con_id);
+			}
+
+			for(const int& id : contig_ids){
+				if(PRINT_READS){
+					for(Read& r : all_contigs[id].read_information){
+						reads.insert(r.name);
+						all_reads.insert(r.name);
+					}
+					
+				}
+				else{
+					for(string& r : all_compressed_contigs[id].read_names){
+						reads.insert(r);
+						all_reads.insert(r);
+					}
+				}
+			}	
+		}
+
+		supports[i] = reads.size();
+	}
+
+	supports[4] = all_reads.size();
+
+	return supports;
+}
+
+void svict_caller::print_consensus(result_consensus& rc){
+
+	for(int i = 0; i < 4; i++){
+		cerr << rc.locs[i].first << "-" << rc.locs[i].second << ", ";
+	}
+	cerr << endl;
+
+	for(int i = 0; i < 4; i++){
+		cerr << rc.intervals[i].size() << ",";
+	}
+	cerr << endl;
+
+	cerr << "conflicts: " << rc.conflicts.size() << endl;
+	if(!rc.conflicts.empty()){
+		for(pair<int, vector<bool>>& conflict : rc.conflicts){
+			cerr << conflict.second[0] << "," << conflict.second[1] << "," << conflict.second[2] << "," << conflict.second[3] << "," << conflict.second[4] << endl;
+		}
+	}
+
+	cerr << "type: " << rc.type << endl;
+
+}
+
+void svict_caller::find_consensus(){
+
+	for(int id = 0; id < results_full.size(); id++){
+
+		result_full& r = results_full[id];
+		bool found = false;
+
+		for(int idc = 0; idc < results_consensus.size(); idc++){
+
+			result_consensus& rc = results_consensus[idc];
+			found = true;
+
+			for(int i = 0; i < 4; i++){
+				if(!check_loc(r.intervals[i], rc.locs[i], !(i%2))){
+					found = false;
+					break;
+				}
+			}
+
+			if(found && r.type == rc.type){
+				for(int i = 0; i < 4; i++){
+					update_loc(r.intervals[i], rc.locs[i], !(i%2));
+					if(r.intervals[i] != -1)rc.intervals[i].insert(r.intervals[i]);
+				}
+				break;
+			}
+		}
+
+		if(!found){
+			for(int idc = 0; idc < results_consensus.size(); idc++){
+				result_consensus& rc = results_consensus[idc];
+				vector<bool> conflict = vector<bool>(5,false);
+				found = false;
+
+				for(int i = 0; i < 4; i++){
+					conflict[i] = (check_loc(r.intervals[i], rc.locs[i], !(i%2)) == 1);
+					if(conflict[i]){
+						found = true;
+					}
+				}
+
+				if(found){
+					conflict[4] = (r.type == rc.type);
+					rc.conflicts.push_back({results_consensus.size(), conflict});
+				}
+			}
+
+			result_consensus rc_new;
+
+			for(int i = 0; i < 4; i++){
+				unordered_set<int> new_set;
+
+				if(r.intervals[i] == -1){
+					rc_new.locs.push_back((pair<int,int>){-1,-1});
+				}
+				else{
+					if(!(i%2)){
+						rc_new.locs.push_back((pair<int,int>){(all_intervals[r.intervals[i]].loc + all_intervals[r.intervals[i]].len), (all_intervals[r.intervals[i]].loc + all_intervals[r.intervals[i]].len)});
+					}
+					else{
+						rc_new.locs.push_back((pair<int,int>){all_intervals[r.intervals[i]].loc, all_intervals[r.intervals[i]].loc});
+					}
+					new_set.insert(r.intervals[i]);
+				}
+				
+				rc_new.intervals.push_back(new_set);
+			}
+
+			rc_new.type = r.type;
+			results_consensus.push_back(rc_new);
+		}
+	}
+
+	//resolve conflicts
+cerr << "Calls: " << results_consensus.size() << endl;
+
+	for(int idc = 0; idc < results_consensus.size(); idc++){
+		result_consensus& rc = results_consensus[idc];
+ if(rc.conflicts.size() > 0){
+//print_consensus(rc);
+ }
+	}
+
+cerr << "Conflict Resolution"  << endl;
+cerr << "===================" << endl;
+
+	for(int idc = 0; idc < results_consensus.size(); idc++){
+		result_consensus& rc = results_consensus[idc];
+		vector<int> support = compute_result_support(rc);
+
+		if(rc.ignore)continue;
+
+		if(rc.conflicts.size() > 0){
+
+
+			for(pair<int, vector<bool>>& conflict : rc.conflicts){
+				int sim = 0;
+				for(const bool& c : conflict.second){
+					if(c)sim++;
+				}
+
+				//Conflict on type
+				if(sim == 4 && conflict.second[4]){
+
+					//DEL DUP
+					//INS DUP
+					//All TRANS
+
+					if(rc.type == TRANS){
+print_consensus(rc);
+ cerr << "----------------------" << endl;
+print_consensus(results_consensus[conflict.first]);
+ cerr << "===================" << endl;
+					}
+					else if(rc.type != INV){
+
+
+					}
+				}
+			}
+		}
+	}
+}
+
+void svict_caller::print_results2(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
+
+	long loc1, loc2, loc3, loc4, start, end;
+	int sup;
+	char chr;
+	string best_gene1 = "", best_name1 = "", best_trans1 = "", context1 = "";
+	string best_gene2 = "", best_name2 = "", best_trans2 = "", context2 = "";
+	string best_gene3 = "", best_name3 = "", best_trans3 = "", context3 = "";
+	string ref_seq, alt_seq;
+	string contig_labels;
+	string cluster_labels;
+	string contig_seq_left, contig_seq_right;
+	string filter = "PASS";
+	string anno = "";
+	string info = "";
+	vector<uint32_t> vec_best1, vec_best2, vec_best3;
+	vector<char> chrs = vector<char>(4,0);
+
+	for(int idc = 0; idc < results_consensus.size(); idc++){
+		result_consensus& rc = results_consensus[idc];
+		
+		//if(rc.ignore)continue;
+
+		vector<int> support = compute_result_support(rc);
+		loc1 = rc.locs[0].first;
+		loc2 = rc.locs[1].second; //leave a gap if necessary
+		loc3 = rc.locs[2].first;
+		loc4 = rc.locs[3].second;
+		//string contig_seq_left = (rc.intervals[0].empty()) ? ( PRINT_READS ? all_contigs[rc.intervals[0].begin()].data : con_string(j, 0, all_compressed_contigs[j].data.size()/2) ) : "";
+		//string contig_seq_right = (rc.intervals[4].empty()) ? ( PRINT_READS ? all_contigs[j].data : con_string(j, 0, all_compressed_contigs[j].data.size()/2);
+
+		unordered_set<int> all_contig_ids;
+		unordered_set<int> all_cluster_ids;
+		ref_seq = "N";
+		alt_seq = "N";
+
+		for(int i = 0; i < 4; i++){
+			
+			if(!rc.intervals[i].empty()){
+				unordered_set<int> contig_ids;
+				
+				for(const int& id : rc.intervals[i]){
+					all_contig_ids.insert(all_intervals[id].con_id);
+					contig_ids.insert(all_intervals[id].con_id);
+					chrs[i] = all_intervals[id].chr;
+				}
+
+				if(PRINT_READS){
+					for(const int& id : contig_ids){	
+						contig& con = all_contigs[id];
+						pair<int,char>& c = cluster_info[id];
+						fprintf(fr_vcf, ">Cluster: %d Contig: %d MaxSupport: %d BP: %d Reads: \n", c.first, id, con.support(), 0); //TODO find way to get start loc in contig
+						fprintf(fr_vcf, "ContigSeq: %s\n", con.data.c_str());
+						for (auto &read: con.read_information)
+							fprintf(fr_vcf, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
+					}	
+				}
+				else{
+					for(const int& id : contig_ids){
+						compressed_contig& con = all_compressed_contigs[id];
+						pair<int,char>& c = cluster_info[id];
+					}
+				}
+			}
+			else{
+
+			}
+		}
+		
+		contig_labels = "";
+		cluster_labels = "";
+
+		for(const int& id : all_contig_ids){
+			all_cluster_ids.insert(cluster_info[id].first);
+			contig_labels = contig_labels + (to_string(id) + ",");
+		}
+
+		for(const int& id : all_cluster_ids){
+			cluster_labels = cluster_labels + (to_string(id) + ",");
+		}
+
+		contig_labels.resize(contig_labels.length()-1);
+		cluster_labels.resize(cluster_labels.length()-1);
+		
+
+		if(rc.type == INS){
+
+		}
+		else if(rc.type == INV){
+
+		}
+		else if(rc.type == DEL){
+			
+		}
+		else if(rc.type == DUP){
+			
+		}
+		
+		if(rc.type == TRANS){
+			if(loc4 == -1){
+				fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+					chromos[chrs[0]].c_str(), loc1, idc, ref_seq.c_str(), ref_seq.c_str(), chromos[chrs[1]].c_str(), loc2, filter.c_str(), idc, cluster_labels.c_str(), contig_labels.c_str(), support[0], anno.c_str()); 
+				fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\tN\t.N\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+					chromos[chrs[0]].c_str(), (loc1+1), idc, filter.c_str(), idc, cluster_labels.c_str(), contig_labels.c_str(), support[0], anno.c_str()); 
+			}
+			else if(loc1 == -1){
+				fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\tN\tN.\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+					chromos[chrs[2]].c_str(), loc3, idc, filter.c_str(), idc, cluster_labels.c_str(), contig_labels.c_str(), support[3], anno.c_str()); 
+				fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+					chromos[chrs[2]].c_str(), (loc3+1), idc, ref_seq.c_str(), chromos[chrs[3]].c_str(), loc4, ref_seq.c_str(), filter.c_str(), idc, cluster_labels.c_str(), contig_labels.c_str(), support[3], anno.c_str()); 
+			}
+			else{
+				fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+					chromos[chrs[0]].c_str(), loc1, idc, ref_seq.c_str(), ref_seq.c_str(), chromos[chrs[1]].c_str(), loc2, filter.c_str(), idc, cluster_labels.c_str(), contig_labels.c_str(), support[0], anno.c_str()); 
+				fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+					chromos[chrs[0]].c_str(), loc4, idc, ref_seq.c_str(), chromos[chrs[1]].c_str(), loc3, ref_seq.c_str(), filter.c_str(), idc, cluster_labels.c_str(), contig_labels.c_str(), support[3], anno.c_str()); 
+			}
+		}
+		else{
+			if(loc3 == -1){
+				chr = chrs[0];
+				start = loc1;
+				end = (loc4 == -1) ? ((loc2 == -1) ? loc1 : loc2) : loc4;
+			}
+			else if(loc2 == -1){
+				chr = chrs[0];
+				start = (loc1 == -1) ? ((loc3 == -1) ? loc4 : loc3) : loc1;
+				end = loc4;
+			}
+			else{
+				chr = chrs[0];
+				start = loc1;
+				end = loc4;
+			}
+			fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\tPASS\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
+				chromos[chr].c_str(), start, ref_seq.c_str(), alt_seq.c_str(), sv_types[rc.type].c_str(), info.c_str(), end, cluster_labels.c_str(), contig_labels.c_str(), support[4], anno.c_str());
+		}
+
+
+// 	1       179112343       bnd_698_1       N       N[22:-1[        .       PASS    SVTYPE=BND;MATEID=bnd_698_2;CLUSTER=179114916,179112344;CONTIG=2097,50;SUPPORT=39;
+// 1       179114915       bnd_698_2       N       ]22:-1]N        .       PASS    SVTYPE=BND;MATEID=bnd_698_1;CLUSTER=179114916,179112344;CONTIG=2097,50;SUPPORT=39;
+
+
+		// if(USE_ANNO){
+		// 	locate_interval(chromos[chr], loc, loc, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene1, best_name1, best_trans1, vec_best1);
+		// 	context1 = contexts[vec_best1[0]];
+		// 	locate_interval(chromos[pchr], pend, pend, gene_sorted_map[chromos[pchr]], 0, iso_gene_map, best_gene2, best_name2, best_trans2, vec_best2);
+		// 	context2 = contexts[vec_best2[0]];
+		// 	locate_interval(chromos[chr], loc, pend, gene_sorted_map[chromos[chr]], 0, iso_gene_map, best_gene3, best_name3, best_trans3, vec_best3);
+		// 	context3 = contexts[vec_best3[0]];
+
+
+		// 	anno = "ANNOL=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1  + ";ANNOC=" + context3 + "," + best_gene3 + "," + best_trans3 + "," + best_name3 + ";ANNOR=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2;  
+
+		// 	if(vec_best1[0] > 0 && vec_best2[0] > 0 && best_gene1 != best_gene2)type = type + ":FUSION";
+			
+		// }
+	}
 }
 
 long svict_caller::add_result(int id, mapping_ext& m1, mapping_ext& m2, short type, char pair_chr, long pair_loc){

@@ -17,6 +17,7 @@ struct Read {
 struct compressed_contig {
 	vector<bool> data;
 	vector<unsigned short> coverage;
+	vector<string> read_names;
 };
 
 struct contig {

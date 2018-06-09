@@ -8,8 +8,8 @@
 using namespace std;
 
 /***************************************************************/
-extractor::extractor( string filename, int min_sc, int max_support, int max_fragment_size, double clip_ratio, bool use_indel): 
-	min_sc(min_sc), max_support(max_support), max_fragment_size(max_fragment_size), clip_ratio(clip_ratio), use_indel(use_indel)
+extractor::extractor( string filename, int min_sc, int max_support, int max_fragment_size, double clip_ratio, bool use_indel, bool print_stats): 
+	min_sc(min_sc), max_support(max_support), max_fragment_size(max_fragment_size), clip_ratio(clip_ratio), use_indel(use_indel), PRINT_STATS(print_stats)
 {
 
 	int min_length = -1;
@@ -143,10 +143,10 @@ int extractor::dump_oea( const Record &rc, read &tmp, vector<breakpoint> &bps, d
 
 		if(bps.empty()){
 			for(int i = max_fragment_size/2; i <= max_fragment_size; i++){
-				bps.push_back({sc_loc-i, mapped});
+				bps.push_back({sc_loc-i, mapped, BOTH});
 			}
 			for(int i = max_fragment_size/2; i <= max_fragment_size; i++){
-				bps.push_back({sc_loc+mapped+i, mapped});
+				bps.push_back({sc_loc+mapped+i, mapped, BOTH});
 			}
 		}
 			
@@ -220,12 +220,13 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 
 		if ( 0 < r1 && 0 < r2 )
 		{
-			if ( ( 0x2 != ( 0x2 & rc.getMappingFlag() ) ) || ( clip_ratio > ( m1 + m2 )*1.0/( r1 + r2 ) ) )
+			if ( ( clip_ratio > ( m1 + m2 )*1.0/( r1 + r2 ) ) )
 			{  part_flag = 1; }
 		}
 
 		if ( part_flag ) // default: use rc2 as anchor and 
 		{
+
 			mate_flag = 0;
 			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
 			flag = rc2.getMappingFlag();
@@ -277,7 +278,7 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 				tmp.seq = seq;
 			}
 		}
-		else{
+		else if( 0x2 != ( 0x2 & rc.getMappingFlag() ) ){
 
 			//first mate
 			reversed2 = ((rc2.getMappingFlag()  & 0x10) == 0x10);
@@ -296,14 +297,15 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 			r1 = (int) strlen( rc.getSequence() );
 
 			int diff = (sc_loc-sc_loc2);
-			
+
 			if(reversed == reversed2){
+dis_count1++;
 				//use first mate
 				if(reversed){
 					seq = reverse_complement (rc2.getSequence());
 					
-					for(int i = 0; i < diff; i++){
-						bps.push_back({sc_loc2+r2+i, r2});
+					for(int i = 0; i < max_fragment_size; i++){
+						bps.push_back({sc_loc-i, r1, BOTH});
 					}
 					
 					tmp.name = string(rc2.getReadName()) + "+";
@@ -313,8 +315,8 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 				else{
 					seq = reverse_complement (rc.getSequence());
 
-					for(int i = 0; i < diff; i++){
-						bps.push_back({sc_loc-i, r1});
+					for(int i = 0; i < max_fragment_size; i++){
+						bps.push_back({sc_loc2+r2+i, r2, BOTH});
 					}
 					
 					tmp.name = string(rc.getReadName()) + "-";
@@ -323,16 +325,19 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 
 			}
 			else if(diff > min_sc && reversed2){
-
+dis_count2++;
 				//use both TODO
 				seq = rc.getSequence();
 
-				for(int i = 0; i < diff; i++){
-					bps.push_back({sc_loc-i, r1});
+				for(int i = 0; i < max_fragment_size; i++){
+					bps.push_back({sc_loc2+r2+i, r2, BOTH});
 				}
 				
 				tmp.name = string(rc.getReadName()) + "-";
 				tmp.seq = seq;
+			}
+			else if(diff > min_sc && reversed){
+dis_count3++;
 			}
 		}
 		
@@ -474,6 +479,8 @@ void extractor::extract_reads()
 			bps.clear();
 			sc_loc = 0;
 
+
+
 			if ( flag < 256 ) 
 			{
 				orphan_flag  = (  (flag & 0xc) == 0xc); 
@@ -513,6 +520,7 @@ void extractor::extract_reads()
 				if ( !orphan_flag && !chimera_flag ){				
 
 					if ( oea_flag ){
+oea_count++;
 						dump_oea( rc, cur_read, bps, clip_ratio);
 					}
 					else{
@@ -590,7 +598,7 @@ void extractor::extract_reads()
 					indexed_soft_clips.push_back(read);
 				}
 				cerr << "chr" << ref << " done" << endl;
-				cerr << "Processing supplementary clusters..." << endl;
+				cerr << "Processing " << supple_clust.size() << " supplementary clusters..." << endl;
 			}
 			break;
 		}
@@ -681,7 +689,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				c_type = cur_type;
 			}
 
-			if((!heuristic && sc_read.bp.sc_loc != c_start) || (heuristic && uncertainty < abs(sc_read.bp.sc_loc - c_start))){
+			if((!heuristic && sc_read.bp.sc_loc != c_start) || (heuristic && uncertainty <= abs(sc_read.bp.sc_loc - c_start))){
 
 				supple_clust.back().start = c_start;
 				supple_clust.back().end = c_start;
@@ -690,7 +698,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				if(!heuristic && !local_reads.empty()){
 					sortable_read cur_read = local_reads.front();
 
-					while(uncertainty < abs(c_start - cur_read.bp.sc_loc)){
+					while(uncertainty <= abs(c_start - cur_read.bp.sc_loc)){
 						local_reads.pop_front();
 						if(local_reads.empty())break;
 						cur_read = local_reads.front();
@@ -748,7 +756,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 		if(!heuristic && !local_reads.empty()){
 			sortable_read cur_read = local_reads.front();
 
-			while(uncertainty < abs(c_start - cur_read.bp.sc_loc)){
+			while(uncertainty <= abs(c_start - cur_read.bp.sc_loc)){
 				local_reads.pop_front();
 				if(local_reads.empty())break;
 				cur_read = local_reads.front();
@@ -794,6 +802,13 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 
 		bool add_read;
 		read cur_read;
+
+if(PRINT_STATS && supple_clust.size() == 1){
+cerr << "Discordant (INV): " << dis_count1 << endl;
+cerr << "Discordant (DUP): " << dis_count2 << endl;
+cerr << "Discordant (INS): " << dis_count3 << endl;
+cerr << "OEA: " << oea_count << endl;
+}
 
 		for(auto& read : supple_clust.back().sa_reads){
 

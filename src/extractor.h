@@ -71,12 +71,17 @@ private:
 	int skip_pos = -1;
 	int skip_count = 0;
 	int index = 0;
+	const bool PRINT_STATS = false;
 	const double clip_ratio;
 	const int min_sc;
 	const int max_support;
 	const int max_fragment_size;
 	const bool use_indel;
 	const short DLEFT = 0; const short LEFT = 1; const short BOTH = 2; const short RIGHT = 3; const short DRIGHT = 4;
+	int dis_count1 = 0;
+	int dis_count2 = 0;
+	int dis_count3 = 0;
+	int oea_count = 0;
 
 private:
 	int parse_sc( const char *cigar, int &match_l, int &read_l );
@@ -87,7 +92,7 @@ private:
 	void extract_reads();
 
 public:
-	extractor(string filename, int min_sc, int max_support, int max_fragment_size = 200, double clip_ratio = 0.99, bool use_indel = true);
+	extractor(string filename, int min_sc, int max_support, int max_fragment_size = 200, double clip_ratio = 0.99, bool use_indel = true, bool print_stats = false);
 	~extractor();
 	extractor::cluster& get_next_cluster(int uncertainty, int min_support, bool heuristic);
 	bool has_next_cluster();

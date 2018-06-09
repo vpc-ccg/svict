@@ -15,8 +15,8 @@
 
 using namespace std;
 
-variant_caller::variant_caller(const string &input_file, const string &reference) : 
-		as(OVERLAP_NEW), ref(reference.c_str()){
+variant_caller::variant_caller(const int assembler_overlap, const string &input_file, const string &reference) : 
+		as(assembler_overlap), ref(reference.c_str()){
 
 	in_file = input_file;
 }

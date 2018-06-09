@@ -96,3 +96,8 @@ int genome::get_ref_length(const string &rname){
 	return (int)reference.size();
 }
 
+string genome::get_ref_name(){
+
+	return reference_name;
+}
+

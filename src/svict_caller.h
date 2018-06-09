@@ -13,6 +13,7 @@
 #include "genome.h"
 #include "annotation.h"
 #include "extractor.h"
+#include "smoother.h"
 #include "../include/tsl/sparse_map.h"
 
 using namespace std;
@@ -24,7 +25,7 @@ private:
 	const int MAX_INTERVALS = 100000;
 	const short MASK = 6;
 	const short MASK_RC = 4;
-	const int CON_NUM_DEBUG = -1191;//1700;//2009;//1124;//ugly DUP Ns//605;//1474;//1371;//566; //INS;//1178 //YX;//411//2034;//1357;//8562;   
+	const int CON_NUM_DEBUG = -464;//1700;//2009;//1124;//ugly DUP Ns//605;//1474;//1371;//566; //INS;//1178 //YX;//411//2034;//1357;//8562;   
 	int cur_debug_id = 0;  //1538 investigate BP repair
 	const double AVG_READ_LEN = 50;
 	const int REPEAT_LIMIT = 2;
@@ -145,14 +146,32 @@ private:
 		char pair_chr;
 	};
 
+	struct result_full{
+
+		vector<int> intervals;
+		short type;
+	};
+
+	struct result_consensus{
+
+		vector<pair<int,int>> locs;
+		vector<unordered_set<int>> intervals;
+		vector<pair<int, vector<bool>>> conflicts;
+		short type;
+		bool ignore;
+	};
+
 	vector<contig> all_contigs; // 10% of memory
 	vector<compressed_contig> all_compressed_contigs; 
 	vector<contig_metrics> all_contig_metrics;
 	vector<vector<bool>> all_contig_Ns;
+	vector<mapping_ext> all_intervals;	
 	vector<pair<char,pair<int,int>>> regions;
 	vector<vector<mapping>>** contig_mappings;
 	vector<last_interval>** last_intervals;
 	unordered_map<long, vector<result>>** results;
+	vector<result_full> results_full;
+	vector<result_consensus> results_consensus;
 	vector<pair<int,char>> cluster_info;
 	vector<vector<int>> contig_kmers;
 	vector<int> contig_kmer_counts;
@@ -189,6 +208,7 @@ private:
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
 	void assemble(string print_fastq, int min_support, int max_support, int window_size, const bool LOCAL_MODE, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic);
+	vector<int> set_cover(vector<extractor::cluster>& clusters);
 	void probalistic_filter();
 	void index();
 	void generate_intervals(const string &out_vcf, const bool LOCAL_MODE);
@@ -201,10 +221,16 @@ private:
 	void getPath(vector<int>& path, int dist[], int parent[], int j);
 	pair<vector<pair<int,int>>,int> findNextPath(const int DEPTH, int** graph, treeNode* node, vector<pair<int,int>> ancestors, int dist[], int parent[]);
 	vector<pair<vector<int>, int>> dijkstra(const int DEPTH, int** graph, int s, int t, int max_paths);
+	int check_loc(int id, pair<int,int>& cloc, bool left);
+	void update_loc(int id, pair<int,int>& cloc, bool left);
+	vector<int> compute_result_support(result_consensus& rc);
+	void print_consensus(result_consensus& rc);
+	void find_consensus();
+	void print_results2(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);
 	
 public:
 	
-	svict_caller(int kmer_len, int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats);
+	svict_caller(int kmer_len, const int assembler_overlap, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats);
 	~svict_caller();
 	void run(const string& out_vcf, const string& print_fastq, int min_support, int max_support, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE, int window_size, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic);
 	void resume(const string& out_vcf, const string &input_file, const string& print_fastq, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE);

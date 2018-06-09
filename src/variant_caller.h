@@ -34,7 +34,7 @@ protected:
 
 public:
 	
-	variant_caller(const string &input_file, const string &reference);
+	variant_caller(const int assembler_overlap, const string &input_file, const string &reference);
 	~variant_caller();
 
 };

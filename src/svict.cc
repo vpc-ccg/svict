@@ -121,10 +121,10 @@ inline bool check_gtf(string filename){
 
 /********************************************************************/
 void predict (const string &input_file, const string &reference, const string &gtf, const string &out_vcf, const string &print_fastq, const bool print_reads, const bool print_stats, 
-					int k, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE,
+					int k, int assembler_overlap, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE,
 					int window_size, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic, bool resume)
 {
-	svict_caller predictor(k, anchor_len, input_file, reference, gtf, print_reads, print_stats);
+	svict_caller predictor(k, assembler_overlap, anchor_len, input_file, reference, gtf, print_reads, print_stats);
 	if(resume){
 		predictor.resume(out_vcf, input_file, print_fastq, uncertainty, min_length, max_length, sub_optimal, LOCAL_MODE);
 	}
@@ -245,7 +245,8 @@ void printHELP()
 	LOG( "\t-w|--window_size:\t\tClustering window (default 3).");
 	LOG( "\t-d|--min_sc:\t\tMinimum soft clip to consider (default 10).");
 	LOG( "\t-n|--no_indel:\t\tDisable indel parsing (I and D in cigar).");
-	LOG( "\t-a|--anchor:\t\tAnchor length (default 40).");
+	LOG( "\t-O|--assembler_overlap:\t\tRequired read overlap for assembly (default 50).");
+	LOG( "\t-a|--anchor:\t\tAnchor length (default 30).");
 	LOG( "\t-k|--kmer:\t\tk-mer length (default 14).");
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
 	LOG( "\t-c|--sub_optimal:\tMaximum difference from longest path (default 0 - co-optimals only).");
@@ -269,7 +270,7 @@ int main(int argc, char *argv[])
 			annotation = "" ,
 			contig_file = "";
 
-	int k = 14, a = 40, s = 2, S = 5000, u = 8, c = 0, w = 2, m = 60, M = 20000, min_sc = 10, max_fragment_size = 200; 
+	int k = 14, O = 50, a = 30, s = 2, S = 5000, u = 8, c = 0, w = 3, m = 60, M = 20000, min_sc = 10, max_fragment_size = 200; 
 	bool barcodes = false, print_reads = false, print_stats = false, dump_contigs = false, resume = false, indel = true, heuristic = false;
 	double clip_ratio = 0.99;
 	int ref_flag  = 0;
@@ -286,6 +287,7 @@ int main(int argc, char *argv[])
 		{ "print_reads", no_argument, 0, 'p' },
 		{ "print_stats", no_argument, 0, 'P' },
 		{ "kmer", required_argument, 0, 'k' },
+		{ "assembler_overlap", required_argument, 0, 'O' },
 		{ "anchor", required_argument, 0, 'a' },
 		{ "min_support", required_argument, 0, 's' },
 		{ "max_support", required_argument, 0, 'S' },
@@ -302,7 +304,7 @@ int main(int argc, char *argv[])
 		{0,0,0,0},
 	};
 
-	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPk:a:s:S:u:c:m:M:w:d:nHDR", long_opt, &opt_index )  ) )
+	while ( -1 !=  (opt = getopt_long( argc, argv, "hvi:r:o:g:bpPk:O:a:s:S:u:c:m:M:w:d:nHDR", long_opt, &opt_index )  ) )
 	{
 		switch(opt)
 		{
@@ -336,6 +338,9 @@ int main(int argc, char *argv[])
 				break;
 			case 'k':
 				k = atoi(optarg);
+				break;
+			case 'O':
+				O = atoi(optarg);
 				break;
 			case 'a':
 				a = atoi(optarg);
@@ -404,6 +409,10 @@ int main(int argc, char *argv[])
 		msg += "\tError: Min read support should be less than or equal to max read support\n";
 		pass = 0;
 		}
+	if ( O < 0 ){
+		msg += "\tError: Assembler overlap must be a positive integer";
+		pass = 0;
+	}
 	if ( u < 0 ){
 		msg += "\tError: Uncertainty must be a positive integer";
 		pass = 0;
@@ -464,7 +473,7 @@ int main(int argc, char *argv[])
 		contig_file = (out_prefix + ".fastq");
 	}
 
-	predict(input_sam, reference, annotation, (out_prefix + ".vcf"), contig_file, print_reads, print_stats,  k, a, s, S, u, m, M, c, false, w, min_sc, max_fragment_size, clip_ratio, indel, heuristic, resume);
+	predict(input_sam, reference, annotation, (out_prefix + ".vcf"), contig_file, print_reads, print_stats,  k, O, a, s, S, u, m, M, c, false, w, min_sc, max_fragment_size, clip_ratio, indel, heuristic, resume);
 
 	return 0;	
 }
