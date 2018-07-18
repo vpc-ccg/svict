@@ -447,7 +447,7 @@ void extractor::extract_reads()
 	vector<breakpoint> bps;
 	string readname, cigar;
 	read cur_read;
-	//read last_read;
+	string read_seq;
 	int orphan_flag, oea_flag, chimera_flag;
 	int len;
 	int sc_loc = 0, start = 0;
@@ -464,6 +464,7 @@ void extractor::extract_reads()
 	bool clipped;
 	sorted_soft_clips.clear();
 	indexed_soft_clips.clear();
+	//position_coverage = vector<unsigned short>(300000000, 0);
 
 	while(1)
 	{
@@ -475,11 +476,14 @@ void extractor::extract_reads()
 			has_supple = false;
 			cluster_found = false;
 			add_read   = false;
+			read_seq = (string)rc.getSequence();
 			flag     = rc.getMappingFlag();
 			bps.clear();
 			sc_loc = 0;
 
-
+			// for(int i = 0;  i < read_seq.size(); i++){
+			// 	position_coverage[rc.getLocation()+i]+=1;
+			// }
 
 			if ( flag < 256 ) 
 			{
@@ -497,18 +501,18 @@ void extractor::extract_reads()
 						auto it    = supply_dict.find(readname);
 						if ( it != supply_dict.end() ){
 							if ( 0x40 == (flag&0x40) ){
-								it->second.first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+								it->second.first  =  ( 0x10 == (flag&0x10)) ? reverse_complement( read_seq ) : read_seq ;
 							}
 							else{
-								it->second.second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() ;
+								it->second.second  =  ( 0x10 == (flag&0x10)) ? reverse_complement( read_seq ) : read_seq ;
 							}
 						}
 						else{
 							if ( 0x40 == (flag&0x40) ){
-								supply_dict[readname] = { ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence(), "" }; 
+								supply_dict[readname] = { ( 0x10 == (flag&0x10)) ? reverse_complement( read_seq ) : read_seq, "" }; 
 							}
 							else{
-								supply_dict[readname] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence() } ;
+								supply_dict[readname] = { "", ( 0x10 == (flag&0x10)) ? reverse_complement( read_seq ) : read_seq } ;
 							}
 						}
 					}
@@ -530,7 +534,6 @@ oea_count++;
 					if(!bps.empty()){
 						add_read = true;
 					}
-					
 				}	
 			}
 			else if ( ( 0x800 == (flag & 0x800) ))
@@ -549,7 +552,7 @@ oea_count++;
 					add_read = true;
 
 					if(!supple_found){
-						cur_read.seq =  ( 0x10 == (flag&0x10)) ? reverse_complement( rc.getSequence() ) : rc.getSequence();
+						cur_read.seq =  ( 0x10 == (flag&0x10)) ? reverse_complement( read_seq ) : read_seq;
 					}
 				}
 			}
@@ -568,7 +571,6 @@ oea_count++;
 
 					if(bp.len >= min_sc){
 						sorted_soft_clips.insert({string(rc.getReadName()), cur_read.seq, bp, flag, (is_supple && !supple_found)});
-						break;
 					}
 				}
 
@@ -641,7 +643,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				rdel = (counts[RIGHT] + counts[DRIGHT]);
 
 //if(cur_ref == "7" && sc_read.bp.sc_loc == 55174772)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT] << " for " << i << endl;  95479982
-//if(cur_ref == "9" && sc_read.bp.sc_loc >= 95479082 && sc_read.bp.sc_loc <= 95480082)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT] << " for " << i << " @ " << sc_read.bp.sc_loc << endl;
+//if(cur_ref == "8" && sc_read.bp.sc_loc >= 42147802 && sc_read.bp.sc_loc <= 42147902)	cerr << counts[DLEFT] << " " << counts[LEFT]  << " " << counts[BOTH] << " " << counts[RIGHT] << " " << counts[DRIGHT] << " for " << i << " @ " << sc_read.bp.sc_loc << endl;
 
 
 				if(max(max(ldel, both), rdel) < min_support){
@@ -694,6 +696,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 				supple_clust.back().start = c_start;
 				supple_clust.back().end = c_start;
 				supple_clust.back().ref = cur_ref;
+				supple_clust.back().total_coverage = 0;//position_coverage[c_start];
 
 				if(!heuristic && !local_reads.empty()){
 					sortable_read cur_read = local_reads.front();
@@ -752,6 +755,7 @@ extractor::cluster& extractor::get_next_cluster(int uncertainty, int min_support
 		supple_clust.back().start = c_start;
 		supple_clust.back().end = c_start;
 		supple_clust.back().ref = cur_ref;
+		supple_clust.back().total_coverage = 0;//position_coverage[c_start];
 
 		if(!heuristic && !local_reads.empty()){
 			sortable_read cur_read = local_reads.front();

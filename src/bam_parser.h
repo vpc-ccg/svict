@@ -16,7 +16,7 @@ class BAMParser: public Parser {
 	FILE *fd;
 
 	Record currentRecord;
-    size_t file_size;
+    size_t file_size = 0;
 
     int32_t chromosomesCount;
     char **chromosomes;
@@ -38,7 +38,7 @@ public:
 	//bool readRaw(Array<uint8_t> &a);
 	bool hasNext (void);
 	size_t fpos (void);
-	size_t fsize (void);
+	size_t fsize (void); //no longer supported
 
 public:
 	void parse (void);

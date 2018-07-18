@@ -270,6 +270,39 @@ vector<pair<string, string>> svict_caller::correct_reads(vector<pair<string, str
 	return corrected_reads;
 }
 
+bool svict_caller::is_low_complexity(string seq, double cutoff){
+
+	double a = 0;
+	double t = 0;
+	double c = 0;
+	double g = 0;
+
+	for(char & i : seq){
+		switch (i) {
+			case 'A': a++;
+					  break;
+			case 'T': t++;
+					  break;
+			case 'C': c++;
+					  break;
+			default:  g++;
+		}
+	}
+
+	if((c+g)/(double)seq.length() >= cutoff || 
+		(a+t)/(double)seq.length() >= cutoff ||
+		(a+c)/(double)seq.length() >= cutoff ||
+		(a+g)/(double)seq.length() >= cutoff ||
+		(t+c)/(double)seq.length() >= cutoff ||
+		(t+g)/(double)seq.length() >= cutoff){
+		return true;
+	}
+	else{
+		return false;
+	}
+
+}
+
 svict_caller::mapping_ext svict_caller::copy_interval(char chr, bool rc, int con_id, mapping& interval){
 
 	mapping_ext mapping_copy;
@@ -445,7 +478,7 @@ int read_count = 0;
 	// If local mode enabled, use regions around contigs. Otherwise, add all chromosomes as regions
 	if(!LOCAL_MODE){  
 		for(char chr=0; chr < chromos.size(); chr++){
-			regions.push_back({chr,{1, 300000000}});  //WARNING: This will not work with all reference files. Same with old version. 
+			regions.push_back({chr,{1, 300000000}});  
 		}
 	}
 
@@ -511,7 +544,7 @@ int read_count = 0;
 		contig_count2++; 
 		support_count += contig.support();	
 
-		if(p.start >= 43114459 && p.start <= 43114530  ){
+		if(p.start >= -42147802 && p.start <= -42147902  ){
 			cerr << "support: " << contig.support() << " " << contig.data.length() << " " << p.start << " " << cluster_info.size() << " " << p.ref << endl;
 			cerr << contig.data << endl;
 		}
@@ -552,7 +585,7 @@ int read_count = 0;
 	// for (auto &read: contig.read_information)
 	// 	fprintf(writer, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
 
-					cluster_info.push_back({ p.start, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
+					cluster_info.push_back({ p.start, p.total_coverage, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
 
 					vector<bool> Ns = vector<bool>(contig.data.size(),false);
 
@@ -589,6 +622,7 @@ int read_count = 0;
 if(PRINT_STATS){
 	cerr << "Read Count: " << read_count << endl;
 	cerr << "Partition Count: " << part_count << endl;
+	cerr << "Total Contigs: " << contig_count1 << endl;
 	cerr << "Contigs: " << all_contigs.size() << " " << all_compressed_contigs.size() << endl;
 	cerr << "Average Num Contigs Pre-Filter: " << (contig_count1/part_count) << endl;
 	cerr << "Average Num Contigs Post-Filter: " << (contig_count2/part_count) << endl;
@@ -678,6 +712,7 @@ void svict_caller::probalistic_filter(){
 		if(pgk < 0.001 && m.num_reads <= 10){ 
 			if(PRINT_READS){
 				all_contigs[j].data.clear();
+				num_filtered++;
 			}
 			else{
 				all_compressed_contigs[j].data.clear();
@@ -870,7 +905,7 @@ void svict_caller::generate_intervals_from_file(const string &input_file, const 
 				contig.coverage = coverage;
 
 				all_compressed_contigs.push_back(contig);
-				cluster_info.push_back({loc, chr});
+				cluster_info.push_back({loc, 0, chr}); //TODO coverage support
 
 				vector<bool> Ns = vector<bool>(line.length(),false);
 
@@ -1131,14 +1166,14 @@ int corrected_bp = 0;
 					cur_index = index;
 				}
 
-kmer_hits++;
+//kmer_hits++;
 //contig_kmer_counts[contig_kmers_index[cur_index]]++; //178956970
 
 				for(const int& j : contig_kmers[contig_kmers_index[cur_index]]){
 
 					// Local mode temporarily disabled
 					//if( (!LOCAL_MODE || j == jj)){ 
-kmer_hits_con++;
+//kmer_hits_con++;
 						last_interval& l_interval = last_intervals[rc][chromo][j];
 						iend = l_interval.loc + l_interval.len;
 
@@ -1200,7 +1235,7 @@ kmer_hits_con++;
 
 				if(contig_len == 0)continue;
 		 		
-		 		pair<int,char>& bp = cluster_info[j];
+		 		cluster_metrics& bp = cluster_info[j];
 		 		vector<bool>& Ns = all_contig_Ns[j];
 				vector<mapping> valid_intervals;
 				contig_lenk1 = contig_len+k1;
@@ -1215,8 +1250,8 @@ if(contig_len > max_con_len)max_con_len = contig_len;
 
 //STATS
 if(PRINT_STATS){
-int& contig_loc = cluster_info[j].first;
-char& contig_chr = cluster_info[j].second;
+int& contig_loc = bp.sc_loc;
+char& contig_chr = bp.chr;
 if(chromo == contig_chr && abs(interval.loc - contig_loc) < MAX_ASSEMBLY_RANGE){
 anchor_intervals++;
 }
@@ -1374,7 +1409,7 @@ corrected_bp++;
 					sort(cur_intervals.begin(), cur_intervals.end(), con_interval_compare());
 					for(i = 0; i < cur_intervals.size(); i++){
 						mapping& bp_map = cur_intervals[i];
-						if(i > 0 && abs(bp_map.loc - bp.first) < 3){
+						if(i > 0 && abs(bp_map.loc - bp.sc_loc) < 3){
 	 						for(x = i-1; x >= 0; x--){
 	 							mapping& prior_map = cur_intervals[x];
 	 							int e_con_loc = (prior_map.con_loc+k);
@@ -1401,7 +1436,7 @@ corrected_bp++;
 	 						}
 	 						break;	
 	 					}
-	 					else if(i < cur_intervals.size()-1 && abs((bp_map.loc+bp_map.len) - bp.first) < 3){
+	 					else if(i < cur_intervals.size()-1 && abs((bp_map.loc+bp_map.len) - bp.sc_loc) < 3){
 							for(x = i+1; x < cur_intervals.size(); x++){
 	 							mapping& post_map = cur_intervals[x];
 	 							int bp_con_loc = (bp_map.con_loc+k);
@@ -1461,8 +1496,8 @@ if(PRINT_STATS){
 	cerr << "Max Starts: " << max_starts << endl;
 	cerr << "Max Subintervals: " << max_sub << endl;
 	cerr << "Index Misses: " << index_misses << endl;
-	cerr << "Kmer Hits: " << kmer_hits << endl;
-	cerr << "Kmer Hits Total: " << kmer_hits_con << endl;
+	//cerr << "Kmer Hits: " << kmer_hits << endl;
+	//cerr << "Kmer Hits Total: " << kmer_hits_con << endl;
 	cerr << "Corrected BP: " << corrected_bp << endl;
 }
 
@@ -1487,7 +1522,7 @@ void svict_caller::predict_variants(const string &out_vcf, int uncertainty, int 
 
 //STATS
 int normal_edges = 0, ins_edges = 0, source_edges = 0, sink_edges = 0, singletons = 0;
-int path_count = 0;
+int path_count = 0, cons_with_paths = 0;
 int intc1 = 0, intc2 = 0, intc3 = 0, intc4 = 0, intc5 = 0, intc6 = 0;
 int anchor_fails = 0, ugly_fails = 0;
 int short_dup1 = 0, short_dup2 = 0, short_dup3 = 0, short_del = 0, short_inv1 = 0, short_inv2 = 0, short_ins1 = 0, short_ins2 = 0, short_trans = 0, mystery1 = 0, mystery2 = 0, mystery3 = 0;
@@ -1540,8 +1575,8 @@ if(PRINT_STATS)num_intervals = 0;
 	// Traverse each contig
 	for(int j = 0; j < num_contigs; j++){
 
-		contig_loc = cluster_info[j].first;
-		contig_chr = cluster_info[j].second;
+		contig_loc = cluster_info[j].sc_loc;
+		contig_chr = cluster_info[j].chr;
 		contig_seq = PRINT_READS ? all_contigs[j].data : con_string(j, 0, all_compressed_contigs[j].data.size()/2);
 		contig_len = PRINT_READS ? all_contigs[j].data.length() : all_compressed_contigs[j].data.size()/2;
 
@@ -1700,14 +1735,12 @@ cur_debug_id = j;
 		//====================================
 
 		if(!paths.empty()){
-
+cons_with_paths++;
 			int max_paths = PATH_LIMIT;
 			int short_dist = paths[0].second;
 
 			// Check each path and classify variant
 			for(int p = 0; p < min(max_paths, (int)paths.size()); p++){  //top x paths
-
-				if(paths[p].second - short_dist > sub_optimal)break; //only co-optimal
 
 				vector<int>& path = paths[p].first;
 
@@ -1900,7 +1933,6 @@ short_inv1++;
 												i2.id = all_intervals.size();
 												all_intervals.push_back(i2);
 											//	results_full.push_back({{i1.id, -1, -1, i2.id}, DEL});
-mystery1++;
 											}
 										}
 										else{
@@ -2021,7 +2053,12 @@ intc6++;
 					}//anchor set
 				}//path
 
-				if(!anchor_found)max_paths++;
+
+				if(p+1 < paths.size() && paths[p+1].second - short_dist > sub_optimal)break;
+
+				if(!anchor_found){
+					max_paths++;
+				}
 
 			}//paths	
 		}//empty
@@ -2238,7 +2275,7 @@ long_dup++;
 					if(!ip1.visited && (ip1.id1 == -1 || ip1.id2 == -1)){
 						int contig_id = (ip1.id1 == -1) ? all_intervals[ip1.id2].con_id : all_intervals[ip1.id1].con_id;
 						int bp = (ip1.id1 == -1) ? (all_intervals[ip1.id2].con_loc+k-all_intervals[ip1.id2].len) : all_intervals[ip1.id1].con_loc+k;
-						string contig_seq = PRINT_READS ? all_contigs[contig_id].data : con_string(contig_id, 0, all_compressed_contigs[contig_id].data.size()/2);
+						contig_seq = PRINT_READS ? all_contigs[contig_id].data : con_string(contig_id, 0, all_compressed_contigs[contig_id].data.size()/2);
 						vector<bool>& Ns = all_contig_Ns[contig_id];
 						bool Nfix = true;
 						for(int i = 0; i < 10; i++){
@@ -2252,12 +2289,15 @@ long_dup++;
 						iw = all_intervals[ip1.id1];
 						ix = all_intervals[ip1.id2];
 						contig_dist = abs(iw.con_loc - (ix.con_loc-ix.len));
-						chromo_dist = (ix.rc && iw.rc) ? iw.loc-(ix.loc+ix.len) : ix.loc-(iw.loc+iw.len);
-						contig_len = PRINT_READS ? all_contigs[ix.con_id].data.length() : all_compressed_contigs[ix.con_id].data.size()/2;
-						contig_sup = compute_support(ix.con_id, 0, contig_len).second.second;
-
+						
 						if(contig_dist <= uncertainty){
-							if(( (iw.chr != ix.chr || abs(ix.loc - (iw.loc+iw.len)) > max_length/2) ) ){
+
+							chromo_dist = (ix.rc && iw.rc) ? iw.loc-(ix.loc+ix.len) : ix.loc-(iw.loc+iw.len);
+							contig_seq = PRINT_READS ? all_contigs[ix.con_id].data : con_string(ix.con_id, 0, all_compressed_contigs[ix.con_id].data.size()/2);
+							contig_len = PRINT_READS ? all_contigs[ix.con_id].data.length() : all_compressed_contigs[ix.con_id].data.size()/2;
+							contig_sup = compute_support(iw.con_id, iw.con_loc+k, iw.con_loc+k).second.second;
+
+							if(( (iw.chr != ix.chr || abs(ix.loc - (iw.loc+iw.len)) > max_length/2)  && !is_low_complexity(contig_seq.substr(iw.con_loc+k-iw.len,iw.len), LOW_COMPLEX) && !is_low_complexity(contig_seq.substr(ix.con_loc+k-ix.len,ix.len), LOW_COMPLEX)) ){
 								add_result(iw.con_id, iw, ix, TRANS, ix.chr, 0);
 								// results_full.push_back({{w_id, ip1.id2, -1, -1}, TRANS});
 								// results_full.push_back({{-1, -1, w_id, ip1.id2}, TRANS});
@@ -2293,9 +2333,11 @@ long_dup++;
 					}
 					else if(!ip1.visited && ip1.id1 == -1){    //Two more possible with extra FP
 						ix = all_intervals[ip1.id2];
+						contig_seq = PRINT_READS ? all_contigs[ix.con_id].data : con_string(ix.con_id, 0, all_compressed_contigs[ix.con_id].data.size()/2);
 						contig_len = PRINT_READS ? all_contigs[ix.con_id].data.length() : all_compressed_contigs[ix.con_id].data.size()/2;
+						contig_sup = compute_support(ix.con_id, (ix.con_loc+k-ix.len), (ix.con_loc+k-ix.len)).second.second;
 
-						if(ix.len >= contig_len/3 && (ix.con_loc+k-ix.len) > contig_len/4){
+						if(ix.len >= contig_len/3 && (ix.con_loc+k-ix.len) > contig_len/4 && !is_low_complexity(contig_seq.substr(0,ix.con_loc+k-ix.len), LOW_COMPLEX_UNMAPPED)){
 							add_result(ix.con_id, ix, ix, INSL, ix.chr, 0);
 							//results_full.push_back({{-1, -1, -1, ip1.id2}, INS});
 		one_bp_ins++;
@@ -2304,9 +2346,11 @@ long_dup++;
 					}
 					else if(!ip1.visited && ip1.id2 == -1){
 						iw = all_intervals[ip1.id1];
+						contig_seq = PRINT_READS ? all_contigs[iw.con_id].data : con_string(iw.con_id, 0, all_compressed_contigs[iw.con_id].data.size()/2);
 						contig_len = PRINT_READS ? all_contigs[iw.con_id].data.length() : all_compressed_contigs[iw.con_id].data.size()/2;
+						contig_sup = compute_support(iw.con_id, iw.con_loc+k, iw.con_loc+k).second.second;
 
-						if(iw.len >= contig_len/3 && (contig_len-iw.con_loc+k) > contig_len/4){
+						if(iw.len >= contig_len/3 && (contig_len-(iw.con_loc+k)) > contig_len/4 && !is_low_complexity(contig_seq.substr(iw.con_loc+k+1,contig_len-(iw.con_loc+k)), LOW_COMPLEX_UNMAPPED)){
 							add_result(iw.con_id, iw, iw, INSR, iw.chr, 0);
 							//results_full.push_back({{ip1.id1, -1, -1, -1}, INS});
 		one_bp_ins++;
@@ -2328,6 +2372,7 @@ if(PRINT_STATS){
 	cerr << "Singletons: " << singletons << endl;
 
 	cerr << "Paths: " << path_count << endl;
+	cerr << "Contigs with Paths: " << cons_with_paths << endl; 
 
 	cerr << "Short_INV1: " << short_inv1 << endl;
 	cerr << "Short_INV2: " << short_inv2 << endl;
@@ -2933,8 +2978,8 @@ void svict_caller::print_results2(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 				if(PRINT_READS){
 					for(const int& id : contig_ids){	
 						contig& con = all_contigs[id];
-						pair<int,char>& c = cluster_info[id];
-						fprintf(fr_vcf, ">Cluster: %d Contig: %d MaxSupport: %d BP: %d Reads: \n", c.first, id, con.support(), 0); //TODO find way to get start loc in contig
+						cluster_metrics& c = cluster_info[id];
+						fprintf(fr_vcf, ">Cluster: %d Contig: %d MaxSupport: %d BP: %d Reads: \n", c.sc_loc, id, con.support(), 0); //TODO find way to get start loc in contig
 						fprintf(fr_vcf, "ContigSeq: %s\n", con.data.c_str());
 						for (auto &read: con.read_information)
 							fprintf(fr_vcf, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
@@ -2943,7 +2988,7 @@ void svict_caller::print_results2(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 				else{
 					for(const int& id : contig_ids){
 						compressed_contig& con = all_compressed_contigs[id];
-						pair<int,char>& c = cluster_info[id];
+						cluster_metrics& c = cluster_info[id];
 					}
 				}
 			}
@@ -2956,7 +3001,7 @@ void svict_caller::print_results2(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 		cluster_labels = "";
 
 		for(const int& id : all_contig_ids){
-			all_cluster_ids.insert(cluster_info[id].first);
+			all_cluster_ids.insert(cluster_info[id].sc_loc);
 			contig_labels = contig_labels + (to_string(id) + ",");
 		}
 
@@ -3050,9 +3095,12 @@ long svict_caller::add_result(int id, mapping_ext& m1, mapping_ext& m2, short ty
 	int contig_dist = (m2.con_loc-m2.len)-m1.con_loc; 
 	int contig_len = PRINT_READS ? all_contigs[id].data.length() : all_compressed_contigs[id].data.size()/2;
 	int contig_sup;
-	int contig_loc = cluster_info[id].first;
-	char contig_chr = cluster_info[id].second;
+	int contig_loc = cluster_info[id].sc_loc;
+	int total_coverage = cluster_info[id].total_coverage;
+	char contig_chr = cluster_info[id].chr;
 	char strand = '+';
+	pair<int,pair<int,int>> support;
+	call_support sup;
 	result new_result;
 	new_result.info = "";
 	new_result.one_bp = false;
@@ -3113,12 +3161,10 @@ long svict_caller::add_result(int id, mapping_ext& m1, mapping_ext& m2, short ty
 			else if(m1.loc > m2.loc && (m1.loc + m1.len) > (m2.loc + m2.len)){
 				new_result.info = ":TANDEM";
 				new_result.ref_seq = con_string(id,m1.con_loc+k-1, 1);
-				new_result.one_bp = true;
 			}
 			else{
 				new_result.info = ":INTERSPERSED"; //TODO we have the alt sequence
 				new_result.ref_seq = con_string(id,m1.con_loc+k-1, 1);
-				new_result.one_bp = true;
 			}
 		}
 		else{
@@ -3191,13 +3237,27 @@ long svict_caller::add_result(int id, mapping_ext& m1, mapping_ext& m2, short ty
 		}
 	}
 
-	pair<int,pair<int,int>> support = compute_support(id, min(m1.con_loc, m2.con_loc-m2.len+k), max(m1.con_loc, m2.con_loc-m2.len+k));
-	contig_sup = support.second.second;
+	if(new_result.info == ":L" || new_result.alt_seq == "<INS>"){
+		support = compute_support(id, (m1.con_loc+k-m1.len), (m1.con_loc+k-m1.len));
+	}
+	else{
+		support = compute_support(id, (m1.con_loc+k), (m1.con_loc+k));
+	}
+
+	sup.l_sup = support.second.second;
+	sup.l_sup_total = total_coverage;
+	
+	if(contig_dist > 0){
+		support = compute_support(id, (m1.con_loc+k+contig_dist), (m1.con_loc+k+contig_dist));
+	}
+
+	sup.r_sup = support.second.second;
+	sup.r_sup_total = pair_chr == -1 ? total_coverage : total_coverage;// TODO this is wrong 
 
 	new_result.end = end;
 	new_result.clust = contig_loc;
 	new_result.con = id;
-	new_result.sup = contig_sup;
+	new_result.sup = sup;
 	new_result.pair_loc = pair_loc;
 	new_result.pair_chr = pair_chr;
 
@@ -3209,6 +3269,7 @@ long svict_caller::add_result(int id, mapping_ext& m1, mapping_ext& m2, short ty
 void svict_caller::print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 
 	long loc, ploc, start, end, pend;
+	double var, normal, vaf1, vaf2;
 	char pchr;
 	string best_gene1 = "", best_name1 = "", best_trans1 = "", context1 = "";
 	string best_gene2 = "", best_name2 = "", best_trans2 = "", context2 = "";
@@ -3312,9 +3373,20 @@ void svict_caller::print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 	// 	}
 	// }
 
+	if(PRINT_READS){
+		for(int id = 0; id < all_contigs.size(); id++ ){
+			contig& con  = all_contigs[id];
+			fprintf(fr_vcf, ">CLUSTER=%d CONTIG=%d MaxSupport: %d BP: %d Reads: \n", cluster_info[id].sc_loc, id, 0, 0); //TODO find way to get start loc in contig
+			fprintf(fr_vcf, "ContigSeq: %s\n", con.data.c_str());
+			for (auto &read: con.read_information)
+				fprintf(fr_vcf, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
+		}
+	}
+
 //STATS
 int bnd_count = 0;
 int not_bnd_count = 0;
+int result_count = 0;
 
 	for(int sv = 0; sv < sv_types.size(); sv++){
 		for(char chr = 0; chr < chromos.size(); chr++){
@@ -3326,13 +3398,14 @@ int not_bnd_count = 0;
 				unordered_set<paired_result, paired_result_hash> pairs; 
 				unordered_set<int> contigs;
 				filter = "PASS";
-				c.sup = 0;
+				c.sup = {0,0,0,0};
 				c.end = 0;
 
 				if(result_pair.second.empty())continue;
 
 				for(auto& r : result_pair.second){
-					if(r.end != c.end && r.sup > c.sup){
+result_count++;
+					if(r.end != c.end && (r.sup.l_sup+r.sup.r_sup) > (c.sup.l_sup+c.sup.r_sup)){
 						c = r;
 						pairs.clear();
 						pairs.insert({r.pair_loc, r.end, r.pair_chr});
@@ -3346,21 +3419,14 @@ int not_bnd_count = 0;
 					else if(r.end == c.end || r.pair_loc > 0 || r.pair_chr != c.pair_chr){
 						clusters.insert(r.clust);
 						contigs.insert(r.con);
-						c.sup += r.sup;
+						c.sup.l_sup += r.sup.l_sup;
+						c.sup.r_sup += r.sup.r_sup;
 
 					//	if(r.pair_loc != 0){
 							pairs.insert({r.pair_loc, r.end, r.pair_chr});
 							// c.pair_loc = r.pair_loc;
 							// c.pair_chr = r.pair_chr;
 					//	}					
-					}
-
-					if(PRINT_READS){
-						contig con = all_contigs[r.con];
-						fprintf(fr_vcf, ">Cluster: %d Contig: %d MaxSupport: %d BP: %d Reads: \n", r.clust, r.con, r.sup, 0); //TODO find way to get start loc in contig
-						fprintf(fr_vcf, "ContigSeq: %s\n", con.data.c_str());
-						for (auto &read: con.read_information)
-							fprintf(fr_vcf, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
 					}
 				}
 
@@ -3415,25 +3481,35 @@ int not_bnd_count = 0;
 							
 						}
 
+						// var = c.sup.l_sup;
+						// normal = c.sup.l_sup_total;
+						// vaf1 = normal == 0 ? 1 : var/normal;
+						// var = c.sup.r_sup;
+						// normal = c.sup.r_sup_total;
+						// vaf2 = normal == 0 ? 1 : var/normal;
+
+						// if(vaf1 > 1)vaf1 = 1;
+						// if(vaf2 > 1)vaf2 = 1;
+
 						if(sv == TRANS){
 
 							if(c.info == "left_bp"){
-								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-									chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), pend, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\tN\t.N\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-									chromos[chr].c_str(), (loc+1), c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n",  //VAF=%.3f;
+									chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), pend, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup.l_sup, anno.c_str()); //max(vaf1,vaf2),
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\tN\t.N\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+									chromos[chr].c_str(), (loc+1), c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup.r_sup, anno.c_str()); //max(vaf1,vaf2),
 							}
 							else if(c.info == "right_bp"){
-								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\tN\tN.\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-									chromos[chr].c_str(), loc, c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-									chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[pchr].c_str(), pend, c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\tN\tN.\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+									chromos[chr].c_str(), loc, c.u_id, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup.l_sup, anno.c_str()); //max(vaf1,vaf2),
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n",  //VAF=%.3f;
+									chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[pchr].c_str(), pend, c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup.r_sup, anno.c_str()); // max(vaf1,vaf2), 
 							}
 							else{
-								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-									chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), pend, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
-								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-									chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[pchr].c_str(), (pend + c.alt_seq.length()), c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_1\t%s\t%s[%s:%d[\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_2;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+									chromos[chr].c_str(), loc, c.u_id, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), pend, filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup.l_sup, anno.c_str()); //max(vaf1,vaf2),
+								fprintf(fo_vcf, "%s\t%d\tbnd_%d_2\t%s\t]%s:%d]%s\t.\t%s\tSVTYPE=BND;MATEID=bnd_%d_1;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+									chromos[chr].c_str(), (loc+1), c.u_id, c.ref_seq.c_str(), chromos[pchr].c_str(), (pend + c.alt_seq.length()), c.ref_seq.c_str(), filter.c_str(), c.u_id, cluster_ids.c_str(), contig_ids.c_str(), c.sup.r_sup, anno.c_str()); //max(vaf1,vaf2), 
 							}
 						}
 						else{
@@ -3447,22 +3523,22 @@ int not_bnd_count = 0;
 								end = max(loc, pend);
 							}
 
-							fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\t%s\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), filter.c_str(), type.c_str(), c.info.c_str(), end, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str());
+							fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\t%s\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+								chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), filter.c_str(), type.c_str(), c.info.c_str(), end, cluster_ids.c_str(), contig_ids.c_str(), c.sup.l_sup, anno.c_str()); //max(vaf1,vaf2),
 						}
 					}
 					else if(ploc > 0){
 
 						unordered_set<long> clusters;
 						unordered_set<int> contigs;
-						cp.sup = 0;
+						cp.sup = {0,0,0,0};
 						cp.end = 0;
 
 						for(result& r : results[sv][pchr][ploc]){
 
 							if(r.pair_loc < 0){
 
-								if(r.end != cp.end && r.sup > cp.sup){
+								if(r.end != cp.end && (r.sup.l_sup+r.sup.r_sup) > (cp.sup.l_sup+cp.sup.r_sup)){
 
 									cp = r;
 
@@ -3475,7 +3551,8 @@ int not_bnd_count = 0;
 								else if(r.end == cp.end){
 									clusters.insert(r.clust);
 									contigs.insert(r.con);
-									cp.sup += r.sup;
+									cp.sup.l_sup += r.sup.l_sup;
+									cp.sup.r_sup += r.sup.r_sup;
 									
 								}
 							}
@@ -3511,6 +3588,16 @@ int not_bnd_count = 0;
 						// int end1 == m4.loc			== cp.end
 						// int end2 == m3.loc+m3.len    == c.pair_loc 
 
+						// var = max(c.sup.l_sup,c.sup.r_sup);
+						// normal = c.sup.l_sup_total; //TODO capture edge case 
+						// vaf1 = normal == 0 ? 1 : var/normal;
+						// var = max(cp.sup.l_sup,cp.sup.r_sup);
+						// normal = cp.sup.r_sup_total;
+						// vaf2 = normal == 0 ? 1 : var/normal;
+
+						// if(vaf1 > 1)vaf1 = 1;
+						// if(vaf2 > 1)vaf2 = 1;
+
 						if(sv == TRANS){
 	bnd_count++;
 
@@ -3539,13 +3626,13 @@ int not_bnd_count = 0;
 								}
 							}
 
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t%s[%s:%d[\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), loc, c.con, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), pend, info.c_str(), cp.con, cluster_ids.c_str(), contig_ids.c_str(), c.sup, anno.c_str()); 
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t%s[%s:%d[\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+								chromos[chr].c_str(), loc, c.con, c.ref_seq.c_str(), c.ref_seq.c_str(), chromos[pchr].c_str(), pend, info.c_str(), cp.con, cluster_ids.c_str(), contig_ids.c_str(), max(c.sup.l_sup,c.sup.r_sup), anno.c_str()); //max(vaf1,vaf2),
 
 							if(USE_ANNO)anno = "ANNOL=" + context2 + "," + best_gene2 + "," + best_trans2 + "," + best_name2 + ";ANNOR=" + context1 + "," + best_gene1 + "," + best_trans1 + "," + best_name1; 
 
-							fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t]%s:%d]%s\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), cp.end, cp.con, cp.ref_seq.c_str(), chromos[pchr].c_str(), ploc, cp.ref_seq.c_str(), info.c_str(), c.con, cluster_ids_pair.c_str(), contig_ids_pair.c_str(), cp.sup, anno.c_str()); 
+							fprintf(fo_vcf, "%s\t%d\tbnd_%d\t%s\t]%s:%d]%s\t.\tPASS\tSVTYPE=BND%s;MATEID=bnd_%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+								chromos[chr].c_str(), cp.end, cp.con, cp.ref_seq.c_str(), chromos[pchr].c_str(), ploc, cp.ref_seq.c_str(), info.c_str(), c.con, cluster_ids_pair.c_str(), contig_ids_pair.c_str(), max(cp.sup.l_sup,cp.sup.r_sup), anno.c_str()); //max(vaf1,vaf2),
 						}
 						else{
 	not_bnd_count++;
@@ -3593,8 +3680,8 @@ int not_bnd_count = 0;
 								}
 							}
 							
-							fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\tPASS\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", 
-								chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), type.c_str(), c.info.c_str(),  end, cluster_ids.c_str(), contig_ids.c_str(), (c.sup+cp.sup), anno.c_str());
+							fprintf(fo_vcf, "%s\t%d\t.\t%s\t%s\t.\tPASS\tSVTYPE=%s%s;END=%d;CLUSTER=%s;CONTIG=%s;SUPPORT=%d;%s\n", //VAF=%.3f;
+								chromos[chr].c_str(), start, c.ref_seq.c_str(), c.alt_seq.c_str(), type.c_str(), c.info.c_str(),  end, cluster_ids.c_str(), contig_ids.c_str(), (max(c.sup.l_sup,c.sup.r_sup)+max(cp.sup.l_sup,cp.sup.r_sup)), anno.c_str()); //max(vaf1,vaf2),
 							
 						}
 					}// pair_loc > 0
@@ -3604,7 +3691,8 @@ int not_bnd_count = 0;
 	}
 
 if(PRINT_STATS){
-cerr << "bnd_count " << bnd_count << endl;
-cerr << "not_bnd_count " << not_bnd_count << endl;
+cerr << "bnd_count: " << bnd_count << endl;
+cerr << "not_bnd_count: " << not_bnd_count << endl;
+cerr << "result count: " << result_count << endl;
 }
 }

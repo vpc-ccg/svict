@@ -31,6 +31,8 @@ private:
 	const int REPEAT_LIMIT = 2;
 	const int PATH_LIMIT = 2;
 	const int SUB_OPTIMAL = 0;
+	const double LOW_COMPLEX_UNMAPPED = 0.7;
+	const double LOW_COMPLEX = 0.85;
 	const int CON_REPEAT_LIMIT = 100;//20;//2;
 	const int ANCHOR_SIZE = 40;
 	int BUILD_DIST = 40;
@@ -63,6 +65,12 @@ private:
 		inline std::size_t operator()(const paired_result & v) const {
 			return v.loc*31+v.chr;
 		}
+	};
+
+	struct cluster_metrics{
+		int sc_loc;
+		int total_coverage;
+		char chr;
 	};
 	
 	struct contig_metrics{
@@ -131,6 +139,13 @@ private:
 		int v;
 	};
 
+	struct call_support{
+		unsigned short l_sup;
+		unsigned short l_sup_total;
+		unsigned short r_sup;
+		unsigned short r_sup_total;
+	};
+
 	struct result{
 
 		string ref_seq;
@@ -141,7 +156,7 @@ private:
 		long clust;
 		int con;
 		int u_id;
-		unsigned short sup;
+		call_support sup;
 		long pair_loc;
 		char pair_chr;
 	};
@@ -172,7 +187,7 @@ private:
 	unordered_map<long, vector<result>>** results;
 	vector<result_full> results_full;
 	vector<result_consensus> results_consensus;
-	vector<pair<int,char>> cluster_info;
+	vector<cluster_metrics> cluster_info;
 	vector<vector<int>> contig_kmers;
 	vector<int> contig_kmer_counts;
 	vector<tsl::sparse_map<int, vector<int>>> kmer_locations;
@@ -202,6 +217,7 @@ private:
 	compressed_contig compress(contig& con);
 	pair<unsigned short,pair<unsigned short,unsigned short>> compute_support(int& id, int start, int end);
 	vector<pair<string, string>> correct_reads(vector<pair<string, string>> reads);
+	bool is_low_complexity(string seq, double cutoff);
 	void dump_contig(FILE* writer, contig c, int id, int support, int loc, char chr);
 	long add_result(int id, mapping_ext& m1, mapping_ext& m2, short type, char pair_chr, long pair_loc);
 	void print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);

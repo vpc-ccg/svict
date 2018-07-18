@@ -28,7 +28,7 @@ to get a description of all the parameters.
 
 #### Simulation Datasets Used for Evaluation
 Please check [this link](https://goo.gl/PTzJec) to download the simulation datasets that we used for evaluating SViCT. The folder contains 2 data files:
-1. sim.pe.sorted.bam: BAM file containing simulated cfDNA reads from a Venter genome with inserted SVs
+1. sim.100.sorted.bam: BAM file containing simulated cfDNA reads from a Venter genome with inserted SVs (75bp and 150bp read data is also availible)
 2. Homo_sapiens.GRCh38.87.dna.chromosomes.fa: reference genome from GRCh38.
 
 We also provide a checksum file ***md5.sum*** for checking file integrity.
@@ -36,10 +36,10 @@ We also provide a checksum file ***md5.sum*** for checking file integrity.
 To run SViCT on this dataset, type
 
 ```
-./svict -i sim.pe.sorted.bam -r Homo_sapiens.GRCh38.87.dna.chromosomes.fa
+./svict -i sim.100.sorted.bam -r Homo_sapiens.GRCh38.87.dna.chromosomes.fa
 ```
 
-Remember to specify the paths correctly for ***Homo_sapiens.GRCh38.87.dna.chromosomes.fa*** and ***sim.pe.sorted.bam*** if you download these files to a folder other than the one you run SViCT. The VCF file with the prediction results will be generated as **out.vcf** in the current directory. An alternate output prefix can be specified with "-o".
+Remember to specify the paths correctly for ***Homo_sapiens.GRCh38.87.dna.chromosomes.fa*** and ***sim.100.sorted.bam*** if you download these files to a folder other than the one you run SViCT. The VCF file with the prediction results will be generated as **out.vcf** in the current directory. An alternate output prefix can be specified with "-o".
 
 
 ---

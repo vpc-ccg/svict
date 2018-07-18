@@ -236,7 +236,7 @@ void printHELP()
 	LOG( "\t-g|--annotation:\tGTF file. Enables annotation of SV calls and fusion identification." );
 	LOG( "\t-s|--min_support:\tMin Read Support (default 2).");
 	LOG( "\t-S|--max_support:\tMax Read Support (default unlimited).");
-	LOG( "\t-m|--min_length:\tMin SV length (default 60).");
+	LOG( "\t-m|--min_length:\tMin SV length (default 30).");
 	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
 
 	LOG( "\t\nAdditional Parameters:");
@@ -249,7 +249,7 @@ void printHELP()
 	LOG( "\t-a|--anchor:\t\tAnchor length (default 30).");
 	LOG( "\t-k|--kmer:\t\tk-mer length (default 14).");
 	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
-	LOG( "\t-c|--sub_optimal:\tMaximum difference from longest path (default 0 - co-optimals only).");
+	LOG( "\t-c|--sub_optimal:\tMaximum difference from longest path (default 0 - co-optimals only, negative value disables).");
 	LOG( "\t-H|--heuristic:\t\tUse clustering heuristic (good for data with PCR duplicates).");
 	LOG( "\t-D|--dump_contigs:\t\tDump contigs in fastq format for mapping.");
 	LOG( "\t-R|--resume:\t\tResume at the interval chaining stage with mapped contigs.");
@@ -270,7 +270,7 @@ int main(int argc, char *argv[])
 			annotation = "" ,
 			contig_file = "";
 
-	int k = 14, O = 50, a = 30, s = 2, S = 5000, u = 8, c = 0, w = 3, m = 60, M = 20000, min_sc = 10, max_fragment_size = 200; 
+	int k = 14, O = 50, a = 30, s = 2, S = 5000, u = 8, c = 0, w = 3, m = 30, M = 20000, min_sc = 10, max_fragment_size = 200; 
 	bool barcodes = false, print_reads = false, print_stats = false, dump_contigs = false, resume = false, indel = true, heuristic = false;
 	double clip_ratio = 0.99;
 	int ref_flag  = 0;
@@ -415,10 +415,6 @@ int main(int argc, char *argv[])
 	}
 	if ( u < 0 ){
 		msg += "\tError: Uncertainty must be a positive integer";
-		pass = 0;
-	}
-	if ( c < 0 ){
-		msg += "\tError: Sub optimal difference must be a positive integer";
 		pass = 0;
 	}
 	if ( w < 0 ){

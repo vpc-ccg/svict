@@ -50,6 +50,7 @@ public:
 		vector<sa_read> sa_reads;
 		int start;
 		int end;
+		int total_coverage;
 		string ref;
 	};
 
@@ -63,6 +64,7 @@ private:
 	set<sortable_read> sorted_soft_clips;
 	vector<sortable_read> indexed_soft_clips;
 	vector<cluster> supple_clust;
+	vector<unsigned short> position_coverage;
 	deque<sortable_read> local_reads; 
 	cluster orphan_clust;
 	string cur_ref;

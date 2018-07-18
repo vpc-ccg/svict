@@ -49,10 +49,10 @@ typedef vector<Node> Graph;
 class assembler {
 private:
 	static const int SEED = 92821; // must be prime
-	static const int PRIME = 92821;//787;
-	static const int K = 23;//787;
-	static const int MAX_READS = 5000;//787;
-	static const int READ_LEN = 301;//787;
+	static const int PRIME = 92821;
+	static const int K = 23;
+	static const int MAX_READS = 10000;
+	static const int READ_LEN = 301;
 	const int min_glue_size;
 	long long power;
 	long long** hashes;
