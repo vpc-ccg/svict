@@ -22,7 +22,7 @@ and output is written to "out.vcf".
 
 You can use 
 ```
-cfdna-sv/svict -h
+svict/svict -h
 ```
 to get a description of all the parameters. 
 
