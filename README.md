@@ -27,7 +27,7 @@ svict/svict -h
 to get a description of all the parameters. 
 
 #### Simulation Datasets Used for Evaluation
-Please check [this link](https://goo.gl/PTzJec) to download the simulation datasets that we used for evaluating SViCT. The folder contains 2 data files:
+Please check [this link](https://figshare.com/articles/Simulation_Datasets_for_Evaluation/5758539) to download the simulation datasets that we used for evaluating SViCT. The folder contains 2 data files:
 1. sim.100.sorted.bam: BAM file containing simulated cfDNA reads from a Venter genome with inserted SVs (75bp and 150bp read data is also availible)
 2. Homo_sapiens.GRCh38.87.dna.chromosomes.fa: reference genome from GRCh38.
 
