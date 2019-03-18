@@ -6,8 +6,8 @@ SViCT is a computational tool for detecting structural variations from targeted 
 ### How do I get SViCT?
 Just clone our repository and issue the `make` command:
 ```
-git clone https://github.com/vpc-ccg/cfdna-sv.git
-cd cfdna-sv && make
+git clone https://github.com/vpc-ccg/svict.git
+cd svict && make
 ```
 
 > **Note**: You will need at least g++ 4.9 to compile the source code.
