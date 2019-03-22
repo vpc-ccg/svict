@@ -1,5 +1,5 @@
-CC=g++
-CFLAGS= -w -c -O3 -std=gnu++0x
+CXX?=g++
+CFLAGS= -w -c -O3 -std=c++0x
 SOURCES=partition.cc svict.cc assembler.cc genome.cc variant_caller.cc svict_caller.cc simulator.cc annotation.cc logger.cc common.cc bam_parser.cc sam_parser.cc record.cc sort.cc extractor.cc smoother.cc
 LDFLAGS=-lm -lz -lpthread -pthread
 OBJECTS=$(SOURCES:.cc=.o) 
@@ -15,10 +15,10 @@ PROFILE_FLAGS:
 	$(eval LDFLAGS = $(LDFLAGS) -pg -g)
 
 $(EXECUTABLE): $(OBJECTS) 
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+	$(CXX) $(OBJECTS) $(LDFLAGS) -o $@
 
 .cc.o:
-	$(CC) $(CFLAGS) $< -o $@ 
+	$(CXX) $(CFLAGS) $< -o $@ 
 
 clean:
 	find . -name '*.o' -delete
