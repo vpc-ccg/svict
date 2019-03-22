@@ -5,6 +5,7 @@ LIBS=-lm -lz -lpthread -pthread
 OBJECTS=$(SOURCES:.cc=.o) 
 EXECUTABLE=svict
 
+foo = $PATH
 all:	$(SOURCES) $(EXECUTABLE)
 	rm -rf *.o
 
@@ -21,4 +22,5 @@ $(EXECUTABLE): $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $< -o $@ 
 
 clean:
+	@echo $(value FOO)
 	find . -name '*.o' -delete
