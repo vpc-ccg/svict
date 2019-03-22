@@ -58,4 +58,4 @@ Remember to specify the paths correctly for ***Homo_sapiens.GRCh38.87.dna.chromo
 
 ### Contact & Support
 
-Feel free to drop any inquiry to [agawrons at sfu dot ca](mailto:).
+To report any bugs or issues please refer to the issues [page](https://github.com/vpc-ccg/svict/issues).
