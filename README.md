@@ -79,19 +79,19 @@ The VCF file with the prediction results will be generated as **test.75.vcf** in
 1. **-M|--max_length**: Maximum SV length (default: *20000*)
 
 ### Additional Parameters ###
-1. **-p|--print_reads**: Print all contigs and associated reads as additional output ***out**.vcf.reads*, **out** is the prefix specified in **-o|--output**, when activated. 
-1. **-P|--print_stats**: Print statistics to stderr when activated..
+1. **-p|--print_reads**: Print all contigs and associated reads as additional output *out.vcf.reads* ( *out* is the prefix specified in **-o|--output** )when activated. 
+1. **-P|--print_stats**: Print statistics to stderr when activated.
 1. **-w|--window_size**: Clustering window (default: *3*).
 1. **-d|--min_sc**: Minimum soft clip to consider (default: *10*).
-1. **-n|--no_indel**: Disable indel parsing (```I``` and ```D``` in cigar).
+1. **-n|--no_indel**: Disable indel parsing (```I``` and ```D``` in cigar) when activated.
 1. **-O|--assembler_overlap**: Required read overlap for assembly (default: *50*).
 1. **-a|--anchor**: Anchor length (default: *30*).
 1. **-k|--kmer**: k-mer length (default: *14*).
 1. **-u|--uncertainty**: Uncertainty (default: *8*).
 1. **-c|--sub_optimal**: Maximum difference from longest path (default: *0* - co-optimals only, negative value disables).
-1. **-H|--heuristic**: Use clustering heuristic when actived. Good for data with PCR duplicates when activated..
-1. **-D|--dump_contigs**: Dump contigs in fastq format for mapping when activated..
-1. **-R|--resume**: Resume at the interval chaining stage with mapped contigs when activated..
+1. **-H|--heuristic**: Use clustering heuristic when actived. Good for data with PCR duplicates when activated.
+1. **-D|--dump_contigs**: Dump contigs in fastq format for mapping when activated.
+1. **-R|--resume**: Resume at the interval chaining stage with mapped contigs when activated.
 
 
 You can always use 
