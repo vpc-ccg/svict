@@ -53,6 +53,7 @@ To grab sample data and test ```SViCT```, please first download the following tw
 ```
 curl -L https://ndownloader.figshare.com/files/12380225 --output sim.75.sorted.bam
 curl -L https://ndownloader.figshare.com/files/10144653 --output Homo_sapiens.GRCh38.87.dna.chromosomes.fa
+curl -L https://ndownloader.figshare.com/files/14677538 --output sim.75.vcf
 ```
 
 Type the following command to run ```svict```:
