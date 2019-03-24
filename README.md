@@ -9,8 +9,6 @@ SViCT is a computational tool for detecting structural variations from cell free
 4. [Contact & Support](#contact-support)
 
 # Installation 
-### Prerequisite ###
-You will need at least g++ 4.9 to compile the source code.
 
 ## BIOCONDA
 
@@ -19,6 +17,9 @@ SViCT can be istalled using [conda](https://conda.io/) package manager via [bioc
 To be updated
 ```
 ## Installation from Source
+#### Prerequisite ###
+You will need g++ 4.9 and higher to compile the source code.
+
 To install SViCT, you first need to fetch it from the [github repository](https://github.com/vpc-ccg/svict). After downloading, change the current directory to the source directory ```svict``` and run ```make``` in the terminal to create the binary file **svict**.
 ```
 git clone https://github.com/vpc-ccg/svict.git
