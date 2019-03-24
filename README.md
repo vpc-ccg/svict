@@ -49,7 +49,7 @@ SViCT requires **coordinate-sorted BAM/SAM** and **reference genome FASTA** file
 By default, the output is written to "out.vcf" in the current folder.
 
 ## Test Datasets
-To grab sample data and test ```SViCT```, please first download the following two files ( ~~ 3GB in total):
+To grab sample data and test ```SViCT```, please first download the following two files ( ~ 3GB in total):
 ```
 curl -L https://ndownloader.figshare.com/files/12380225 --output sim.75.sorted.bam
 curl -L https://ndownloader.figshare.com/files/10144653 --output Homo_sapiens.GRCh38.87.dna.chromosomes.fa
