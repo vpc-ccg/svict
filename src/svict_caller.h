@@ -220,7 +220,7 @@ private:
 	bool is_low_complexity(string seq, double cutoff);
 	void dump_contig(FILE* writer, contig c, int id, int support, int loc, char chr);
 	long add_result(int id, mapping_ext& m1, mapping_ext& m2, short type, char pair_chr, long pair_loc);
-	void print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty);
+	void print_results(FILE* fo_vcf, const string &out_vcf, int uncertainty);
 	mapping_ext copy_interval(char chr, bool rc, int con_id, mapping& interval);
 	void print_interval(string label, mapping_ext& interval);
 	void assemble(string print_fastq, int min_support, int max_support, int window_size, const bool LOCAL_MODE, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic);

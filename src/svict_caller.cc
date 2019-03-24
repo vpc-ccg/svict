@@ -1551,7 +1551,6 @@ if(PRINT_STATS)num_intervals = 0;
 	vector<interval_pair> interval_pairs; 											// Pairs of intervals
 
 	FILE *fo_vcf = fopen(out_vcf.c_str(), "ab");
-	FILE *fr_vcf = fopen((out_vcf + ".reads").c_str(), "wb");
 
 	fprintf(fo_vcf, "##INFO=<ID=SVTYPE,Number=1,Type=String,Description=\"Type of structural variant\">\n");
 	fprintf(fo_vcf, "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">\n");
@@ -2415,12 +2414,11 @@ if(PRINT_STATS){
 }
 	
 	//find_consensus();
-	print_results(fo_vcf, fr_vcf, uncertainty);
+	print_results(fo_vcf, out_vcf, uncertainty);
 
 	cerr << "Done." << endl;
 
 	fclose(fo_vcf);
-	fclose(fr_vcf);
 
 	delete[] sorted_intervals;
 
@@ -3266,7 +3264,9 @@ long svict_caller::add_result(int id, mapping_ext& m1, mapping_ext& m2, short ty
 	return loc;
 }
 
-void svict_caller::print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
+void svict_caller::print_results(FILE* fo_vcf, const string &out_vcf, int uncertainty){
+	
+
 
 	long loc, ploc, start, end, pend;
 	double var, normal, vaf1, vaf2;
@@ -3374,6 +3374,7 @@ void svict_caller::print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 	// }
 
 	if(PRINT_READS){
+		FILE *fr_vcf = fopen((out_vcf + ".reads").c_str(), "wb");
 		for(int id = 0; id < all_contigs.size(); id++ ){
 			contig& con  = all_contigs[id];
 			fprintf(fr_vcf, ">CLUSTER=%d CONTIG=%d MaxSupport: %d BP: %d Reads: \n", cluster_info[id].sc_loc, id, 0, 0); //TODO find way to get start loc in contig
@@ -3381,6 +3382,7 @@ void svict_caller::print_results(FILE* fo_vcf, FILE* fr_vcf, int uncertainty){
 			for (auto &read: con.read_information)
 				fprintf(fr_vcf, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
 		}
+		fclose(fr_vcf);
 	}
 
 //STATS
