@@ -95,7 +95,7 @@ The VCF file with the prediction results will be generated as **test.75.vcf** in
 
 You can always use 
 ```
-svict/svict -h
+./svict -h
 ```
 to get a description of all the parameters. 
 

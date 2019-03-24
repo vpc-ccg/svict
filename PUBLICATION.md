@@ -16,7 +16,7 @@ Please check [this link]( https://figshare.com/articles/Simulation_Datasets_for_
 1. [**sim.100.vcf**](https://ndownloader.figshare.com/files/14677535): Predictions results for *sim.100.sorted.bam*
 1. [**sim.75.vcf**](https://ndownloader.figshare.com/files/14677538): Predictions results for *sim.75.sorted.bam*
 
-We also provide a checksum file [***md5.sum***](https://figshare.com/articles/Simulation_Datasets_for_Evaluation/5758539) for checking file integrity.
+We also provide a checksum file [***md5.sum***](https://ndownloader.figshare.com/files/14677550) for checking file integrity.
 
 # Existing SV callers Used in Performance Comparisons ###
 The versions of other SV callers we use in the publication are
