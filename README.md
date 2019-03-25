@@ -44,9 +44,9 @@ You can also go to releases page, click on the desired version and then click ei
 SViCT requires **coordinate-sorted BAM/SAM** and **reference genome FASTA** files to run detections:
 
 ```
-./svict -i [Sorted BAM/SAM] -r [Reference Genome FASTA]
+./svict -i input.sorted.bam -r human_genome.fa -o out
 ```
-By default, the output is written to "out.vcf" in the current folder.
+The output based on *input.sorted.bam* will be written to **out.vcf** in the current folder.
 
 ## Test Datasets
 To grab sample data and test ```SViCT```, please first download the following two files ( ~ 3GB in total):
@@ -73,8 +73,8 @@ The VCF file with the prediction results will be generated as **test.75.vcf** in
 1. **-o|--output** [STRING]: Prefix of output vcf file (default: *out*)
 1. **-g|--annotation**  [FILE]: GTF file. Enables annotation of SV calls and fusion identification.
 1. **-s|--min_support** [INT]: The minimum number of supporting reads required to be considered a SV (default: *2*)
-1. **-m|--min_length**: Minimum SV length (default: *30*)
-1. **-M|--max_length**: Maximum SV length (default: *20000*)
+1. **-m|--min_length** [INT]: Minimum SV length (default: *30*)
+1. **-M|--max_length** [INT]: Maximum SV length (default: *20000*)
 
 ### Additional Parameters ###
 1. **-h|--help**: Shows help message.
