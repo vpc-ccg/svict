@@ -53,45 +53,35 @@ To grab sample data and test ```SViCT```, please first download the following tw
 ```
 curl -L https://ndownloader.figshare.com/files/12380225 --output sim.75.sorted.bam
 curl -L https://ndownloader.figshare.com/files/10144653 --output Homo_sapiens.GRCh38.87.dna.chromosomes.fa
-curl -L https://ndownloader.figshare.com/files/14677538 --output sim.75.vcf
 ```
 
 Type the following command to run ```svict```:
 ```
 ./svict -i sim.75.sorted.bam -r Homo_sapiens.GRCh38.87.dna.chromosomes.fa -o test.75
 ```
-The VCF file with the prediction results will be generated as **test.75.vcf** in the current directory, and the predictions shoule be identical to ```sim.75.vcf```. 
+The VCF file with the prediction results will be generated as **test.75.vcf** in the current directory.
 
 > You need to the paths correctly for ***Homo_sapiens.GRCh38.87.dna.chromosomes.fa*** and ***sim.100.sorted.bam*** if you download these files to a folder other the ```svict``` folder. 
 
 
 ## Command Options ## 
 ### Mandatory Parameters ###
-1. **-i|--input**: Input BAM/SAM file sorted by coordinate
-1. **-r|--reference**: Reference genome fasta file which was used for the above mapping file
+1. **-i|--input** [FILE]: Input alignment file. This file should be a sorted SAM or BAM file.
+1. **-r|--reference** [FILE]: Reference geneome that the reads are algined to.
 
 ### Main Optional Parameters ###
-1. **-o|--output**: Prefix of output vcf file (default: *out*)
-1. **-g|--annotation**: GTF file which enables annotation of SV calls and fusion identification
-1. **-s|--min_support**: The minimum number of supporting reads required to be considered a SV (default: *2*)
-1. **-S|--max_support**: The maximum number of supporting reads required to be considered a SV (default: unlimited)
+1. **-o|--output** [STRING]: Prefix of output vcf file (default: *out*)
+1. **-g|--annotation**  [FILE]: GTF file. Enables annotation of SV calls and fusion identification.
+1. **-s|--min_support** [INT]: The minimum number of supporting reads required to be considered a SV (default: *2*)
 1. **-m|--min_length**: Minimum SV length (default: *30*)
 1. **-M|--max_length**: Maximum SV length (default: *20000*)
 
 ### Additional Parameters ###
-1. **-p|--print_reads**: Print all contigs and associated reads as additional output *out.vcf.reads* ( *out* is the prefix specified in **-o|--output** )when activated. 
-1. **-P|--print_stats**: Print statistics to stderr when activated.
-1. **-w|--window_size**: Clustering window (default: *3*).
-1. **-d|--min_sc**: Minimum soft clip to consider (default: *10*).
-1. **-n|--no_indel**: Disable indel parsing (```I``` and ```D``` in cigar) when activated.
-1. **-O|--assembler_overlap**: Required read overlap for assembly (default: *50*).
-1. **-a|--anchor**: Anchor length (default: *30*).
-1. **-k|--kmer**: k-mer length (default: *14*).
-1. **-u|--uncertainty**: Uncertainty (default: *8*).
-1. **-c|--sub_optimal**: Maximum difference from longest path (default: *0* - co-optimals only, negative value disables).
-1. **-H|--heuristic**: Use clustering heuristic when actived. Good for data with PCR duplicates when activated.
-1. **-D|--dump_contigs**: Dump contigs in fastq format for mapping when activated.
-1. **-R|--resume**: Resume at the interval chaining stage with mapped contigs when activated.
+1. **-h|--help**: Shows help message.
+1. **-v|--version**: Shows current version.
+1. **-p|--print_reads**: Print all contigs and associated reads as additional output *out.vcf.reads* ( *out* is the prefix specified in **-o|--output** )when activated.
+1. **-H|--heuristic**: Use clustering heuristic when actived. Good for data with PCR duplicates.
+1. **-D|--dump_contigs**: Dump contigs in fastq format for mapping.
 
 
 You can always use 

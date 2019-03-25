@@ -21,6 +21,8 @@
 	fprintf(stderr, c"\n", ##__VA_ARGS__)
 #define LOG(c,...)\
 	fprintf(stderr, c"\n", ##__VA_ARGS__)
+#define HELP(c,...)\
+	fprintf(stdout, c"\n", ##__VA_ARGS__)
 #define MAX_CHAR 1000000
 
 using namespace std;

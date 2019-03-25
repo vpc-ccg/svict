@@ -221,41 +221,42 @@ void annotate (string gtf, string in_file, string out_file, bool genomic) {
 /**********************************************/
 void printHELP()
 {
-	LOG( "\n======================================================");
-	LOG( "| SViCT: Structural Variant in ctDNA Sequencing Data |");
-	LOG( "======================================================\n");
-	LOG( "\t-h|--help:\tShows help message.");
-	LOG( "\t-v|--version:\tShows current version.");
+	HELP( "Description");
+	HELP( "\tsvcit  -- Structural Variant in ctDNA Sequencing Data\n");
+	HELP( "Usage:");
+	HELP( "\tsvict -i [FILE] -r [FILE]");
 
-	LOG( "\t\nMandatory Parameters:");
-	LOG( "\t-i|--input:\tInput file. (SAM/BAM)");
-	LOG( "\t-r|--reference:\tReference Genome. Required for SV detection." );
+	HELP( "Required Parameters:");
+	HELP( "\t-i, --input [FILE]\n\t\t Input alignment file. This file should be a sorted SAM or BAM file.\n");
+	HELP( "\t-r, --reference [FILE]\n\t\tReference geneome that the reads are algined to." );
 
-	LOG( "\t\nMain Optional Parameters:");
-	LOG( "\t-o|--output:\tPrefix of output file");
-	LOG( "\t-g|--annotation:\tGTF file. Enables annotation of SV calls and fusion identification." );
-	LOG( "\t-s|--min_support:\tMin Read Support (default 2).");
-	LOG( "\t-S|--max_support:\tMax Read Support (default unlimited).");
-	LOG( "\t-m|--min_length:\tMin SV length (default 30).");
-	LOG( "\t-M|--max_length:\tMax SV length (default 20000).");
+	HELP( "\nMain Optional Parameters:");
+	HELP( "\t-o, --output [STRING]\n\t\tPrefix of output file (default out)\n");
+	HELP( "\t-g, --annotation [FILE]\n\t\tGTF file. Enables annotation of SV calls and fusion identification.\n" );
+	HELP( "\t-s, --min_support [INT]\n\t\tThe minimum number of supporting reads required to be considered a SV (default 2).\n");
+	//HELP( "\t-S, --max_support [INT]\n\t\tMax Read Support (default unlimited).\n");
+	HELP( "\t-m, --min_length [INT]\n\t\tMin SV length (default 30).\n");
+	HELP( "\t-M, --max_length [INT]\n\t\tMax SV length (default 20000).");
 
-	LOG( "\t\nAdditional Parameters:");
-	LOG( "\t-p|--print_reads:\tPrint all contigs and associated reads as additional output.");
-	LOG( "\t-P|--print_stats:\tPrint statistics to stderr.");
-	LOG( "\t-w|--window_size:\t\tClustering window (default 3).");
-	LOG( "\t-d|--min_sc:\t\tMinimum soft clip to consider (default 10).");
-	LOG( "\t-n|--no_indel:\t\tDisable indel parsing (I and D in cigar).");
-	LOG( "\t-O|--assembler_overlap:\t\tRequired read overlap for assembly (default 50).");
-	LOG( "\t-a|--anchor:\t\tAnchor length (default 30).");
-	LOG( "\t-k|--kmer:\t\tk-mer length (default 14).");
-	LOG( "\t-u|--uncertainty:\tUncertainty (default 8).");
-	LOG( "\t-c|--sub_optimal:\tMaximum difference from longest path (default 0 - co-optimals only, negative value disables).");
-	LOG( "\t-H|--heuristic:\t\tUse clustering heuristic (good for data with PCR duplicates).");
-	LOG( "\t-D|--dump_contigs:\t\tDump contigs in fastq format for mapping.");
-	LOG( "\t-R|--resume:\t\tResume at the interval chaining stage with mapped contigs.");
+	HELP( "\t\nAdditional Parameters:");
+	HELP( "\t-h, --help\n\t\tShows help message.\n");
+	HELP( "\t-v, --version\n\t\tShows current version.\n");
+	HELP( "\t-p, --print_reads\n\t\tPrint all contigs and associated reads as additional output out.vcf.reads, out is the prefix specified in -o|--output, when activated.\n");
+	HELP( "\t-P, --print_stats:\n\t\tPrint statistics of detected SV calls and fusions to stderr.\n");
+	HELP( "\t-w, --window_size [INT]\n\t\tClustering window (default 3).\n");
+	HELP( "\t-d, --min_sc [INT]\n\t\tMinimum soft clip length for a read to be considered as unmapped or incorrectly mapped for contig assembly (default 10).\n");
+	HELP( "\t-n, --no_indel\n\t\tIgnore indels in the input BAM/SAM (I and D in cigar) when extracting potential breakpoints.\n");
+	HELP( "\t-O, --assembler_overlap [INT]\n\t\tRequired read overlap for assembly (default 50).\n");
+	HELP( "\t-a, --anchor [INT]\n\t\tAnchor length (default 30).\n");
+	HELP( "\t-k, --kmer [INT]\n\t\tk-mer length to index and remap assembled contigs to reference genome (default 14).\n");
+	HELP( "\t-u, --uncertainty [INT]\n\t\tUncertainty (default 8).\n");
+	HELP( "\t-c, --sub_optimal [INT]\n\t\tMaximum difference from longest path (default 0 - co-optimals only, negative value disables).\n");
+	HELP( "\t-H, --heuristic \n\t\tUse clustering heuristic (good for data with PCR duplicates).\n");
+	HELP( "\t-D, --dump_contigs\n\t\tDump contigs in fastq format for mapping.\n");
+	HELP( "\t-R, --resume:\n\t\tResume at the interval chaining stage with mapped contigs.");
 
-	LOG( "\t\nExample Usage:");
-	LOG( "\t./svict -i input.bam -r human_genome.fa -o final\n\t\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
+	HELP( "Example:");
+	HELP( "\tsvict -i input.bam -r human_genome.fa -o final\n\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
 }
 /********************************************************************/
 int main(int argc, char *argv[])
@@ -452,8 +453,7 @@ int main(int argc, char *argv[])
 	if ( !pass )
 	{
 		E("SViCT does not accept the following parameter values:\n\n%s\n\n", msg.c_str() );
-		E("Check help message for more information\n\n");
-		printHELP();
+		E("Run ./svict -h to check help message for more information\n\n");
 		return 0;
 	}
 
