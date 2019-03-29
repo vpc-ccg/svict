@@ -35,7 +35,7 @@ git checkout v1.0.0
 make
 ```
 
-You can also go to releases page, click on the desired version and then click either **Source Code (zip)** or **Source code (tar.gz)** link to download the file. After decompressing it, you just switch to the ```svict``` directory and run ```make```.
+You can also go to [releases page](https://github.com/vpc-ccg/svict/releases), click on the desired version and then click either **Source Code (zip)** or **Source code (tar.gz)** link to download the file. After decompressing it, you just switch to the ```svict``` directory and run ```make```.
 
 
 
