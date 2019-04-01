@@ -38,9 +38,9 @@ extractor::~extractor(){
 
 
 /****************************************************************/
-int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
+int extractor::parse_sc( const char *cigar,  short int &match_l, short int &read_l )
 {	
-	int tmp = 0;
+	short int tmp = 0;
 	match_l = 0; read_l = 0;
 
 	while( *cigar )
@@ -64,9 +64,9 @@ int extractor::parse_sc( const char *cigar, int &match_l, int &read_l )
 }
 
 /****************************************************************/
-vector<extractor::breakpoint> extractor::extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel){	
+vector<extractor::breakpoint> extractor::extract_bp(string& cigar, short int& mapped, int sc_loc, bool use_indel){	
 
-	int len = 0;
+	short int len = 0;
 	vector<breakpoint> bps;
 	mapped = 0;
 
@@ -116,7 +116,7 @@ int extractor::dump_oea( const Record &rc, read &tmp, vector<breakpoint> &bps, d
 		u_flag = 0,
 		reversed = 0,
 		sc_loc = 0; // if the unmapped end is reversed or not
-	int mapped = 0;
+	short int mapped = 0;
 	bool clipped = false;
 	int mate_flag = 0; // 0 for using rc in parition, 1 for using rc2
 
@@ -207,16 +207,16 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 		Record rc2 = it->second; // with smaller pos
 		int part_flag = 0;
 		int flag_1 = 0, flag_2 = 0;//, t_flag = 0;
-		int r1 = 0, m1 = 0, r2 = 0, m2 = 0; 
+		short r1 = 0, m1 = 0, r2 = 0, m2 = 0; 
 		int mate_flag = 0; // 0 for using rc in parition, 1 for using rc2
 		int len = 0;
-		int mapped = 0;
+		short int mapped = 0;
 		bool clipped = false;
 
 		parse_sc( rc.getCigar(), m1, r1 );
-		if ( 0 == r1) { r1 = (int) strlen( rc.getSequence() ); }
+		if ( 0 == r1) { r1 = (short) strlen( rc.getSequence() ); }
 		parse_sc( rc2.getCigar(), m2, r2 );
-		if ( 0 == r2) { r2 = (int) strlen( rc2.getSequence() ); }
+		if ( 0 == r2) { r2 = (short) strlen( rc2.getSequence() ); }
 
 		if ( 0 < r1 && 0 < r2 )
 		{
@@ -286,7 +286,7 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 			u_flag2 = rc2.getMappingFlag();
 			cigar2 = string(rc2.getCigar());
 			sc_loc2 = rc2.getLocation();
-			r2 = (int) strlen( rc2.getSequence() );
+			r2 = (short) strlen( rc2.getSequence() );
 
 			//second mate
 			reversed = ((rc.getMappingFlag()  & 0x10) == 0x10);
@@ -294,7 +294,7 @@ int extractor::dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bp
 			u_flag = rc.getMappingFlag();
 			cigar = string(rc.getCigar());
 			sc_loc = rc.getLocation();
-			r1 = (int) strlen( rc.getSequence() );
+			r1 = (short) strlen( rc.getSequence() );
 
 			int diff = (sc_loc-sc_loc2);
 
@@ -484,6 +484,10 @@ void extractor::extract_reads()
 			// for(int i = 0;  i < read_seq.size(); i++){
 			// 	position_coverage[rc.getLocation()+i]+=1;
 			// }
+			if ( MAX_LENGTH < read_seq.size() )
+			{
+				cerr << "Warning: " << rc.getReadName() <<  " exceeds Maximum Read Length " << MAX_LENGTH << " bp" << endl;
+			}
 
 			if ( flag < 256 ) 
 			{
@@ -542,7 +546,7 @@ oea_count++;
 				sc_loc   = rc.getLocation();
 				cigar    = string(rc.getCigar());
 				is_supple = true;
-				int mapped = 0;
+				short int mapped = 0;
 
 				bps = extract_bp(cigar, mapped, sc_loc, use_indel);
 

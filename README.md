@@ -14,7 +14,7 @@ SViCT is a computational tool for detecting structural variations from cell free
 
 SViCT can be istalled using [conda](https://conda.io/) package manager via [bioconda](https://bioconda.github.io/) channel:
 ```
-To be updated
+conda install -c bioconda svict
 ```
 ## Installation from Source
 > *Prerequisite.* You will need g++ 4.9 and higher to compile the source code.
@@ -41,15 +41,16 @@ You can also go to [releases page](https://github.com/vpc-ccg/svict/releases), c
 
 
 # Running SViCT
-SViCT requires **coordinate-sorted BAM/SAM** and **reference genome FASTA** files to run detections:
+SViCT requires **coordinate-sorted BAM/SAM** generated from Illumina reads (short read technologies) and **reference genome FASTA** files to run detections:
 
 ```
-./svict -i input.sorted.bam -r human_genome.fa -o out
+./svict -i [input] -r [reference]
 ```
-The output based on *input.sorted.bam* will be written to **out.vcf** in the current folder.
 
-## Test Datasets
-To grab sample data and test ```SViCT```, please first download the following two files ( ~ 3GB in total):
+The output will be written to **out.vcf** in the current folder.
+
+## Running Example
+To test ```SViCT```, please first download the following two files ( ~ 3GB in total):
 ```
 curl -L https://ndownloader.figshare.com/files/12380225 --output sim.75.sorted.bam
 curl -L https://ndownloader.figshare.com/files/10144653 --output Homo_sapiens.GRCh38.87.dna.chromosomes.fa
@@ -57,31 +58,9 @@ curl -L https://ndownloader.figshare.com/files/10144653 --output Homo_sapiens.GR
 
 Type the following command to run ```svict```:
 ```
-./svict -i sim.75.sorted.bam -r Homo_sapiens.GRCh38.87.dna.chromosomes.fa -o test.75
+./svict -i sim.75.sorted.bam -r Homo_sapiens.GRCh38.87.dna.chromosomes.fa -o out
 ```
-The VCF file with the prediction results will be generated as **test.75.vcf** in the current directory.
-
-> You need to the paths correctly for ***Homo_sapiens.GRCh38.87.dna.chromosomes.fa*** and ***sim.100.sorted.bam*** if you download these files to a folder other the ```svict``` folder. 
-
-
-## Command Options ## 
-### Mandatory Parameters ###
-1. **-i|--input** [FILE]: Input alignment file. This file should be a sorted SAM or BAM file.
-1. **-r|--reference** [FILE]: Reference geneome that the reads are algined to.
-
-### Main Optional Parameters ###
-1. **-o|--output** [STRING]: Prefix of output vcf file (default: *out*)
-1. **-g|--annotation**  [FILE]: GTF file. Enables annotation of SV calls and fusion identification.
-1. **-s|--min_support** [INT]: The minimum number of supporting reads required to be considered a SV (default: *2*)
-1. **-m|--min_length** [INT]: Minimum SV length (default: *30*)
-1. **-M|--max_length** [INT]: Maximum SV length (default: *20000*)
-
-### Additional Parameters ###
-1. **-h|--help**: Shows help message.
-1. **-v|--version**: Shows current version.
-1. **-p|--print_reads**: Print all contigs and associated reads as additional output *out.vcf.reads* ( *out* is the prefix specified in **-o|--output** )when activated.
-1. **-H|--heuristic**: Use clustering heuristic when actived. Good for data with PCR duplicates.
-1. **-D|--dump_contigs**: Dump contigs in fastq format for mapping.
+The VCF file with the prediction results will be generated as **out.vcf** in the current directory. The output should be the same as [**original result**](https://ndownloader.figshare.com/files/14677538).
 
 
 You can always use 
@@ -93,7 +72,12 @@ to get a description of all the parameters.
 ---
 
 # Publication
-See the [publication page](https://github.com/vpc-ccg/svict/blob/master/PUBLICATION.md) for citation and more information.
+If you use SViCT in your publication, please cite the following article:
+
+**Structural variation and fusion detection using targeted sequencing data from circulating cell free DNA.** Alexander R Gawroński, Yen-Yi Lin, Brian McConeghy,   Stephane LeBihan, Hossein Asghari, Can Koçkan, Baraa Orabi, Nabil Adra, Roberto Pili, Colin C Collins, S Cenk Sahinalp, Faraz Hach. [Nucleic Acids Res. 2019 Feb 13. doi: 10.1093/nar/gkz067](https://doi.org/10.1093/nar/gkz067)
+
+
+See the [publication page](https://github.com/vpc-ccg/svict/blob/master/PUBLICATION.md) for details about the experiements.
 
 
 # Contact & Support

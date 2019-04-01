@@ -2,8 +2,10 @@
 #define __SMOOTHER__
 
 #include "fiboheap.h"
+#include <cassert>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #define L(c,...) fprintf(stdout,c,##__VA_ARGS__)
 #define E(c,...) fprintf(stderr,c,##__VA_ARGS__)

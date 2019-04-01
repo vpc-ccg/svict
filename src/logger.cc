@@ -7,7 +7,7 @@
 
 using namespace std;
 
-logger::logger(string name = "")
+logger::logger(string name)
 {
 	if (name != "")
 		output = fopen("name", "w");

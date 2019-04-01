@@ -1,6 +1,5 @@
 /// 786
 #include "smoother.h"
-#include <bits/stdc++.h>
 
 using namespace std;
 

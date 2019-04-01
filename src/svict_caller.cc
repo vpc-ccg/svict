@@ -585,7 +585,7 @@ int read_count = 0;
 	// for (auto &read: contig.read_information)
 	// 	fprintf(writer, "+ %d %d %s %s\n", read.location_in_contig, read.seq.size(), read.name.c_str(), read.seq.c_str());
 
-					cluster_info.push_back({ p.start, p.total_coverage, (find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
+					cluster_info.push_back({ p.start, p.total_coverage, static_cast<char>(find(chromos.begin(), chromos.end(), p.ref) - chromos.begin()) });
 
 					vector<bool> Ns = vector<bool>(contig.data.size(),false);
 
@@ -765,7 +765,7 @@ void svict_caller::index()
 		// Per chromosome repeat flag for each contig
 		for(int rc=0; rc < 2; rc++){
 			for(int chr=0; chr < 25; chr++){
-				last_intervals[rc][chr].push_back((last_interval){ 0, k, 0});
+				last_intervals[rc][chr].push_back((last_interval){ 0, static_cast<unsigned int>(k), 0});
 			}
 		}
 

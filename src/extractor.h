@@ -86,8 +86,8 @@ private:
 	int oea_count = 0;
 
 private:
-	int parse_sc( const char *cigar, int &match_l, int &read_l );
-	vector<breakpoint> extract_bp(string& cigar, int& mapped, int sc_loc, bool use_indel);
+	int parse_sc( const char *cigar, short int &match_l, short int &read_l );
+	vector<breakpoint> extract_bp(string& cigar, short int& mapped, int sc_loc, bool use_indel);
 	int dump_oea( const Record &rc, read &tmp, vector<breakpoint> &bps, double clip_ratio );
 	int dump_mapping( const Record &rc, read &tmp, vector<breakpoint> &bps, double clip_ratio );
 	bool dump_supply( const string& readname, const int flag, read &tmp);

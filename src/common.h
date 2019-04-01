@@ -24,6 +24,7 @@
 #define HELP(c,...)\
 	fprintf(stdout, c"\n", ##__VA_ARGS__)
 #define MAX_CHAR 1000000
+#define MAX_LENGTH 32767
 
 using namespace std;
 
