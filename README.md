@@ -1,4 +1,4 @@
-**SViCT**: Structural Variant detrction in Circulating Tumor DNA
+**SViCT**: Structural Variant detection in Circulating Tumor DNA
 ===================
 SViCT is a computational tool for detecting structural variations from cell free DNA (cfDNA) containing low dilutions of circulating tumor DNA (ctDNA).
 
