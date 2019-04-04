@@ -20,7 +20,7 @@
 
 using namespace std;
 #define strequ(A,B) (strcmp(A.c_str(), B.c_str()) == 0)
-svict_caller::svict_caller(int kmer_len, const int assembler_overlap, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats) : 
+svict_caller::svict_caller(int kmer_len, const int assembler_overlap, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats, const vector<string> &chromosomes) : 
 	variant_caller(assembler_overlap, input_file, reference), ANCHOR_SIZE(anchor_len), USE_ANNO((gtf != "")), PRINT_READS(print_reads), PRINT_STATS(print_stats) {
 
 	k = kmer_len;
@@ -30,22 +30,28 @@ svict_caller::svict_caller(int kmer_len, const int assembler_overlap, const int 
 	u_ids = 0;
 	
 	if(USE_ANNO) ensembl_Reader(gtf.c_str(), iso_gene_map, gene_sorted_map );
+	
+	chromos.reserve( chromosomes.size() );
+	for(int id=0; id < chromosomes.size(); id++){
+		chromos.push_back(chromosomes[id]);
+		cerr << chromos[id] << endl;
+	}
 
 	contig_mappings = new vector<vector<mapping>>*[2];
 	for(int rc=0; rc < 2; rc++){
-		contig_mappings[rc] = new vector<vector<mapping>>[25];
+		contig_mappings[rc] = new vector<vector<mapping>>[ chromos.size()];
 	}
 
 	last_intervals = new vector<last_interval>*[2];
 	for(int rc=0; rc < 2; rc++){
-		last_intervals[rc] = new vector<last_interval>[25];
+		last_intervals[rc] = new vector<last_interval>[chromos.size()];
 	}
 
 	results = new unordered_map<long, vector<result>>*[6];
 	for(int sv=0; sv < sv_types.size(); sv++){
-		results[sv] = new unordered_map<long, vector<result>>[25];
+		results[sv] = new unordered_map<long, vector<result>>[chromos.size()];
 	}
-
+	
 	init();
 }
 
@@ -71,7 +77,6 @@ svict_caller::~svict_caller(){
 }
 
 void svict_caller::init(){
-
 	for(int sv=0; sv < sv_types.size(); sv++){
 		for(int chr=0; chr < chromos.size(); chr++){
 			results[sv][chr] = unordered_map<long, vector<result>>();
@@ -764,7 +769,7 @@ void svict_caller::index()
 
 		// Per chromosome repeat flag for each contig
 		for(int rc=0; rc < 2; rc++){
-			for(int chr=0; chr < 25; chr++){
+			for(int chr=0; chr < chromos.size(); chr++){
 				last_intervals[rc][chr].push_back((last_interval){ 0, static_cast<unsigned int>(k), 0});
 			}
 		}
@@ -841,7 +846,7 @@ void svict_caller::index()
 
 	// Initialize mappings vector based on number of contigs
 	for(int rc=0; rc <= 1; rc++){
-		for(int chr=0; chr < 25; chr++){
+		for(int chr=0; chr < chromos.size(); chr++){
 			contig_mappings[rc][chr] = vector<vector<mapping>>(contig_id, vector<mapping>(1, {0, k, -1}));
 		}
 	}
@@ -924,7 +929,7 @@ void svict_caller::generate_intervals_from_file(const string &input_file, const 
 	}
 
 	for(int rc=0; rc <= 1; rc++){
-		for(int chr=0; chr < 25; chr++){
+		for(int chr=0; chr <  chromos.size(); chr++){
 			contig_mappings[rc][chr] = vector<vector<mapping>>(all_compressed_contigs.size(), vector<mapping>());
 		}
 	}
@@ -1028,7 +1033,8 @@ void svict_caller::generate_intervals(const string &out_vcf, const bool LOCAL_MO
 	string gen;
 	FILE *fo_vcf = fopen(out_vcf.c_str(), "wb");
 
-	fprintf(fo_vcf, "##fileformat=VCFv4.2\n##source=SVICT-v1.0\n");
+	//fprintf(fo_vcf, "##fileformat=VCFv4.2\n##source=SVICT-v1.0\n");
+	fprintf(fo_vcf, "##fileformat=VCFv4.2\n##source=SVICT-v%s\n", versionNumber);
 
 //STATS
 int anchor_intervals = 0;
@@ -1546,7 +1552,7 @@ if(PRINT_STATS)num_intervals = 0;
 	mapping_ext sink = {-1, 0, 0, -1, 0, 0, 0};
 	min_length = max(min_length, uncertainty+1);
 
-	vector<sortable_mapping>* sorted_intervals = new vector<sortable_mapping>[25];	// Sorted list for traversal 
+	vector<sortable_mapping>* sorted_intervals = new vector<sortable_mapping>[ chromos.size() ];	// Sorted list for traversal 
 	unordered_map<int, vector<int>> interval_pair_ids;								// Mapping from interval -> interval_pairs
 	vector<interval_pair> interval_pairs; 											// Pairs of intervals
 
@@ -1568,8 +1574,9 @@ if(PRINT_STATS)num_intervals = 0;
 		fprintf(fo_vcf, "##INFO=<ID=ANNOC,Number=4,Type=String,Description=\"Annotation information for inserted region (if applicable): genomic context, gene ID, transcript ID, gene name\">\n");
 		fprintf(fo_vcf, "##INFO=<ID=ANNOR,Number=4,Type=String,Description=\"Annotation information for region right of the BP: genomic context, gene ID, transcript ID, gene name\">\n");
 	}
+	fprintf(fo_vcf, "##INFO=<ID=MATEID,Number=.,Type=String,Description=\"ID of mate breakends\">\n");
 	fprintf(fo_vcf, "##FILTER=<ID=TWO_BP,Description=\"Support for both breakpoints\">\n");
-	fprintf(fo_vcf, "#CHROM  POS ID  REF ALT QUAL  FILTER  INFO\n");
+	fprintf(fo_vcf, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n");
 
 	// Traverse each contig
 	for(int j = 0; j < num_contigs; j++){
@@ -1592,7 +1599,7 @@ if(PRINT_STATS)num_intervals = 0;
 		interval_count = 1;
 
 		// Handle repeats, sort by length and select any interval included an unmapped contig base. 
-		for(char chr=0; chr < 25; chr++){  
+		for(char chr=0; chr < chromos.size(); chr++){  
 			for(rc=0; rc <= use_rc; rc++){ 
 				if(!contig_mappings[rc][chr][j].empty()){
 					for(auto &interval: contig_mappings[rc][chr][j]){  
@@ -2108,7 +2115,7 @@ if(j == CON_NUM_DEBUG){
 	int next_w_loc = 0;
 	int chromo_dist, contig_dist, contig_dist1, contig_dist2;
 
-	for(char chr=0; chr < 25; chr++){
+	for(char chr=0; chr < chromos.size(); chr++){
 		if(sorted_intervals[chr].empty())continue;
 		sort(sorted_intervals[chr].begin(), sorted_intervals[chr].end());
 
@@ -2254,7 +2261,7 @@ long_dup++;
 
 
 	//Single interval pair case (WARNING: may cause many false positives)
-	for(char chr=0; chr < 25; chr++){
+	for(char chr=0; chr < chromos.size(); chr++){
 		if(sorted_intervals[chr].empty())continue;
 		sort(sorted_intervals[chr].begin(), sorted_intervals[chr].end());
 

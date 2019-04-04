@@ -40,7 +40,7 @@ private:
 	const bool PRINT_READS = false;
 	const bool PRINT_STATS = false;
 	const bool USE_BARCODES = false;
-	const vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
+	//const vector<string> chromos = {"1","10","11","12","13","14","15","16","17","18","19","2","20","21","22","3","4","5","6","7","8","9","MT","X","Y"};
 	const vector<string> contexts = {"intergenic", "intronic", "non-coding", "UTR", "exonic-CDS"};
 	const vector<string> sv_types = {"INV", "INS", "DEL", "DUP", "TRANS", "BND"};
 	const short INV = 0; const short INS = 1; const short DEL = 2; const short DUP = 3; const short TRANS = 4; const short BND = 5; const short INSL = 6; const short INSR = 7; 
@@ -193,6 +193,7 @@ private:
 	vector<tsl::sparse_map<int, vector<int>>> kmer_locations;
 	map <string,vector<isoform>> iso_gene_map;
 	map <string,vector<gene_data>> gene_sorted_map;
+	vector<string> chromos = {};
 	unsigned long long kmer_mask;
 	unsigned long long num_kmer;
 	double rate_param;
@@ -246,7 +247,7 @@ private:
 	
 public:
 	
-	svict_caller(int kmer_len, const int assembler_overlap, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats);
+	svict_caller(int kmer_len, const int assembler_overlap, const int anchor_len, const string &input_file, const string &reference, const string &gtf, const bool print_reads, const bool print_stats, const vector<string> &chromosomes);
 	~svict_caller();
 	void run(const string& out_vcf, const string& print_fastq, int min_support, int max_support, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE, int window_size, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic);
 	void resume(const string& out_vcf, const string &input_file, const string& print_fastq, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE);

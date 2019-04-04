@@ -36,6 +36,7 @@ string S (const char* fmt, ...);
 string random_seq(int length);
 int check_AT_GC(const string &, const double &);
 //vector<string> split(const string &s, char delim);
+extern char versionNumber[10];
 
 inline char getDNAValue (char ch) {
 	#define _ 0

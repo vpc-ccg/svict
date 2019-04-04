@@ -22,7 +22,7 @@
 
 using namespace std;
 
-char versionNumber[10]="1.0.0";
+char versionNumber[10]="1.0.1";
 // 10.46
 // S:[step]:END
 
@@ -40,7 +40,7 @@ inline string itoa (int i)
 	return string(c);
 }
 
-inline bool check_input(string filename, bool resume){
+inline bool check_input(string filename, bool resume, vector<string> &chromosomes){
 
 	Parser* parser;
 	FILE *fi = fopen(filename.c_str(), "rb");
@@ -66,16 +66,27 @@ inline bool check_input(string filename, bool resume){
 		ok = false;
 	}
 	else{
-		string sorted = split(split(comment, '\n')[0], '\t')[2];
+		
+		vector<string> comments = split(comment, '\n');
+		string sorted = split( comments[0], '\t')[2];
 
-		if(sorted != "SO:coordinate" && !resume){
+		if(  sorted != "SO:coordinate" && !resume){
 			E("Error: Input BAM/SAM does not appear to be coordinate sorted as required.\n");
 			ok = false;
+
+
+		}
+		for(int id = 1; id < comments.size(); id++)
+		{
+			if ( !(strncmp( "@SQ", comments[id].c_str(), 3) ) )
+			{
+				chromosomes.push_back( split( comments[id], '\t')[1].substr(3) );
+			}
 		}
 	}
 
 	delete parser;
-
+	
 	return ok;
 }
 
@@ -122,13 +133,13 @@ inline bool check_gtf(string filename){
 /********************************************************************/
 void predict (const string &input_file, const string &reference, const string &gtf, const string &out_vcf, const string &print_fastq, const bool print_reads, const bool print_stats, 
 					int k, int assembler_overlap, int anchor_len, int min_support, int max_support, int uncertainty, int min_length, int max_length, int sub_optimal, const bool LOCAL_MODE,
-					int window_size, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic, bool resume)
+					int window_size, int min_sc, int max_fragment_size, double clip_ratio, bool use_indel, bool heuristic, const vector<string> &chromosomes, bool resume)
 {
-	svict_caller predictor(k, assembler_overlap, anchor_len, input_file, reference, gtf, print_reads, print_stats);
+	svict_caller predictor(k, assembler_overlap, anchor_len, input_file, reference, gtf, print_reads, print_stats, chromosomes);
 	if(resume){
 		predictor.resume(out_vcf, input_file, print_fastq, uncertainty, min_length, max_length, sub_optimal, LOCAL_MODE);
 	}
-	else{
+	else{ 
 		predictor.run(out_vcf, print_fastq, min_support, max_support, uncertainty, min_length, max_length, sub_optimal, LOCAL_MODE, window_size, min_sc, max_fragment_size, clip_ratio, use_indel, heuristic);
 	}
 }
@@ -234,7 +245,7 @@ void printHELP()
 	HELP( "\t-o, --output [STRING]\n\t\tPrefix of output file (default out)\n");
 	HELP( "\t-g, --annotation [FILE]\n\t\tGTF file. Enables annotation of SV calls and fusion identification.\n" );
 	HELP( "\t-s, --min_support [INT]\n\t\tThe minimum number of supporting reads required to be considered a SV (default 2).\n");
-	//HELP( "\t-S, --max_support [INT]\n\t\tMax Read Support (default unlimited).\n");
+	HELP( "\t-S, --max_support [INT]\n\t\tThe maximum number of supporting reads required to be considered a SV, could be used to filter out germline calls (default unlimited).\n");
 	HELP( "\t-m, --min_length [INT]\n\t\tMin SV length (default 30).\n");
 	HELP( "\t-M, --max_length [INT]\n\t\tMax SV length (default 20000).");
 
@@ -243,17 +254,17 @@ void printHELP()
 	HELP( "\t-v, --version\n\t\tShows current version.\n");
 	HELP( "\t-p, --print_reads\n\t\tPrint all contigs and associated reads as additional output out.vcf.reads, out is the prefix specified in -o|--output, when activated.\n");
 	HELP( "\t-P, --print_stats:\n\t\tPrint statistics of detected SV calls and fusions to stderr.\n");
-	HELP( "\t-w, --window_size [INT]\n\t\tClustering window (default 3).\n");
-	HELP( "\t-d, --min_sc [INT]\n\t\tMinimum soft clip length for a read to be considered as unmapped or incorrectly mapped for contig assembly (default 10).\n");
+	HELP( "\t-w, --window_size [INT]\n\t\tThe size of the sliding window collecting all reads with soft-clip/split positions in it to form the breakpoint specific cluster for contig assembly. \n\t\tLarger window size could assign a read to more clusters for potentially higher sensitivity with the cost of increased running time (default 3).\n");
+	HELP( "\t-d, --min_sc [INT]\n\t\tMinimum soft clip length for a read to be considered as unmapped or incorrectly mapped to be extracted for contig assembly (default 10).\n");
 	HELP( "\t-n, --no_indel\n\t\tIgnore indels in the input BAM/SAM (I and D in cigar) when extracting potential breakpoints.\n");
-	HELP( "\t-O, --assembler_overlap [INT]\n\t\tRequired read overlap for assembly (default 50).\n");
-	HELP( "\t-a, --anchor [INT]\n\t\tAnchor length (default 30).\n");
+	HELP( "\t-O, --assembler_overlap [INT]\n\t\tThe minimum lenth of overlaps between 2 reads in overlap-layout-consensus contig assembly (default 50).\n");
+	HELP( "\t-a, --anchor [INT]\n\t\tAnchor length. Intervals shorter than this value would be discarded in interval chaining procedure for locating contigs (default 30).\n");
 	HELP( "\t-k, --kmer [INT]\n\t\tk-mer length to index and remap assembled contigs to reference genome (default 14).\n");
-	HELP( "\t-u, --uncertainty [INT]\n\t\tUncertainty (default 8).\n");
-	HELP( "\t-c, --sub_optimal [INT]\n\t\tMaximum difference from longest path (default 0 - co-optimals only, negative value disables).\n");
+	HELP( "\t-u, --uncertainty [INT]\n\t\tUncertainty around the breakpoint position.\n\t\tSee \"Interval Chaining for Optimal Mapping\" in publication (default 8).\n");
+	HELP( "\t-c, --sub_optimal [INT]\n\t\tFor a contig, SViCT will report all paths which are not worse than the optimal by c on the DAGs to achieve potentially better sensitivity. \n\t\tSee \"Interval Chaining for Optimal Mapping\" in publication (default 0 - co-optimals only, negative value disables).\n");
 	HELP( "\t-H, --heuristic \n\t\tUse clustering heuristic (good for data with PCR duplicates).\n");
 	HELP( "\t-D, --dump_contigs\n\t\tDump contigs in fastq format for mapping.\n");
-	HELP( "\t-R, --resume:\n\t\tResume at the interval chaining stage with mapped contigs.");
+	HELP( "\t-R, --resume:\n\t\tResume at the interval chaining stage with mapped contigs.\n");
 
 	HELP( "Example:");
 	HELP( "\tsvict -i input.bam -r human_genome.fa -o final\n\tThis command will generate prediction result final.vcf directly from input.sam.\n\n");
@@ -270,6 +281,7 @@ int main(int argc, char *argv[])
 			out_prefix = "out" ,
 			annotation = "" ,
 			contig_file = "";
+	vector<string> chromosomes; chromosomes.reserve(128);
 
 	int k = 14, O = 50, a = 30, s = 2, S = 5000, u = 8, c = 0, w = 3, m = 30, M = 20000, min_sc = 10, max_fragment_size = 200; 
 	bool barcodes = false, print_reads = false, print_stats = false, dump_contigs = false, resume = false, indel = true, heuristic = false;
@@ -457,7 +469,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if(!check_input(input_sam, resume))return 0;
+	if(!check_input(input_sam, resume, chromosomes))return 0;
 
 	if(!check_ref(reference))return 0;
 
@@ -469,7 +481,7 @@ int main(int argc, char *argv[])
 		contig_file = (out_prefix + ".fastq");
 	}
 
-	predict(input_sam, reference, annotation, (out_prefix + ".vcf"), contig_file, print_reads, print_stats,  k, O, a, s, S, u, m, M, c, false, w, min_sc, max_fragment_size, clip_ratio, indel, heuristic, resume);
+	predict(input_sam, reference, annotation, (out_prefix + ".vcf"), contig_file, print_reads, print_stats,  k, O, a, s, S, u, m, M, c, false, w, min_sc, max_fragment_size, clip_ratio, indel, heuristic, chromosomes, resume);
 
 	return 0;	
 }
