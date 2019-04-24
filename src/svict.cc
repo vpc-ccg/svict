@@ -68,9 +68,15 @@ inline bool check_input(string filename, bool resume, vector<string> &chromosome
 	else{
 		
 		vector<string> comments = split(comment, '\n');
-		string sorted = split( comments[0], '\t')[2];
+		int sorted = 0;
+		vector<string> hd = split( comments[0], '\t');
+		for ( int id = 0; id < hd.size(); id++ )
+		{
+			if (hd[id] == "SO:coordinate")
+			{ sorted = 1; break;}
+		}
 
-		if(  sorted != "SO:coordinate" && !resume){
+		if(  !sorted && !resume){
 			E("Error: Input BAM/SAM does not appear to be coordinate sorted as required.\n");
 			ok = false;
 
