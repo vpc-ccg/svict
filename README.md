@@ -74,7 +74,7 @@ to get a description of all the parameters.
 # Publication
 If you use SViCT in your publication, please cite the following article:
 
-**Structural variation and fusion detection using targeted sequencing data from circulating cell free DNA.** Alexander R Gawroński, Yen-Yi Lin, Brian McConeghy,   Stephane LeBihan, Hossein Asghari, Can Koçkan, Baraa Orabi, Nabil Adra, Roberto Pili, Colin C Collins, S Cenk Sahinalp, Faraz Hach. [Nucleic Acids Res. 2019 Feb 13. doi: 10.1093/nar/gkz067](https://doi.org/10.1093/nar/gkz067)
+**Structural variation and fusion detection using targeted sequencing data from circulating cell free DNA.** Alexander R Gawroński, Yen-Yi Lin, Brian McConeghy,   Stephane LeBihan, Hossein Asghari, Can Koçkan, Baraa Orabi, Nabil Adra, Roberto Pili, Colin C Collins, S Cenk Sahinalp, Faraz Hach. [Nucleic Acids Res. 2019 Apr 23;47(7):e38. doi: 10.1093/nar/gkz067](https://doi.org/10.1093/nar/gkz067)
 
 
 See the [publication page](https://github.com/vpc-ccg/svict/blob/master/PUBLICATION.md) for details about the experiements.
