@@ -43,7 +43,7 @@ bool comp_gene_in_contig( const gene_data &g1, const gene_data &g2)
 uint32_t overlap_l( const uint32_t &s1, const uint32_t &e1, const uint32_t &s2, const uint32_t &e2)
 {
 	uint32_t l = 0;
-	if ( s1 <= s2 && e2 <= e2 )
+	if ( s1 <= s2 && e2 <= e1 )
 	{ l = e2 - s2 + 1;	}
 	else if ( s2 <= s1 && e1 <= e2 )
 	{	l = e1 - s1 + 1;	}
